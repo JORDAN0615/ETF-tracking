@@ -2,4 +2,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+*.xlsx
+etf_tracking.db
 data/
