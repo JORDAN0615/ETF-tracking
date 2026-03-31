@@ -11,10 +11,10 @@
       --ink: #1e2b2f;
       --muted: #64727a;
       --line: #d7d0c3;
-      --add: #17633a;
+      --enter: #17633a;
       --increase: #215a8a;
       --decrease: #9b5d14;
-      --remove: #93323c;
+      --exit: #93323c;
     }
     * { box-sizing: border-box; }
     body {
@@ -107,11 +107,11 @@
       margin-top: 14px;
       font-weight: 600;
     }
-    .state.failed { color: var(--remove); }
-    .state.success { color: var(--add); }
+    .state.failed { color: var(--exit); }
+    .state.success { color: var(--enter); }
     .stale {
       margin-top: 12px;
-      color: var(--remove);
+      color: var(--exit);
       font-weight: 600;
     }
     .summary-grid {
@@ -134,10 +134,10 @@
       font-size: 2.4rem;
       font-weight: 800;
     }
-    .summary-card.add .value { color: var(--add); }
+    .summary-card.enter_top10 .value { color: var(--enter); }
     .summary-card.increase .value { color: var(--increase); }
     .summary-card.decrease .value { color: var(--decrease); }
-    .summary-card.remove .value { color: var(--remove); }
+    .summary-card.exit_top10 .value { color: var(--exit); }
     .table-wrap {
       margin-top: 24px;
       overflow: hidden;
@@ -180,12 +180,12 @@
       border-radius: 12px;
       font-weight: 700;
     }
-    .pill.add { background: rgba(23, 99, 58, 0.12); color: var(--add); }
+    .pill.enter_top10 { background: rgba(23, 99, 58, 0.12); color: var(--enter); }
     .pill.increase { background: rgba(33, 90, 138, 0.12); color: var(--increase); }
     .pill.decrease { background: rgba(155, 93, 20, 0.12); color: var(--decrease); }
-    .pill.remove { background: rgba(147, 50, 60, 0.12); color: var(--remove); }
-    .pos { color: var(--add); font-weight: 700; }
-    .neg { color: var(--remove); font-weight: 700; }
+    .pill.exit_top10 { background: rgba(147, 50, 60, 0.12); color: var(--exit); }
+    .pos { color: var(--enter); font-weight: 700; }
+    .neg { color: var(--exit); font-weight: 700; }
     .muted { color: var(--muted); }
     .empty {
       padding: 24px 28px;
@@ -201,9 +201,6 @@
   <main class="wrap">
     <div class="toolbar">
       <a href="/">回到列表</a>
-      <form method="post" action="/etfs/{{ card.etf.ticker }}/refresh">
-        <button type="submit">更新此 ETF</button>
-      </form>
     </div>
 
     <section class="hero">
@@ -249,9 +246,9 @@
       {% endif %}
 
       <section class="summary-grid">
-        <article class="summary-card add">
-          <div class="label">新增持股</div>
-          <div class="value">{{ card.summary.add }}</div>
+        <article class="summary-card enter_top10">
+          <div class="label">進榜</div>
+          <div class="value">{{ card.summary.enter_top10 }}</div>
         </article>
         <article class="summary-card increase">
           <div class="label">主動加碼</div>
@@ -261,11 +258,12 @@
           <div class="label">主動減碼</div>
           <div class="value">{{ card.summary.decrease }}</div>
         </article>
-        <article class="summary-card remove">
-          <div class="label">刪除持股</div>
-          <div class="value">{{ card.summary.remove }}</div>
+        <article class="summary-card exit_top10">
+          <div class="label">出榜</div>
+          <div class="value">{{ card.summary.exit_top10 }}</div>
         </article>
       </section>
+      <div class="subtitle" style="margin-top: 12px;">僅比較前10大持股，進出榜不等於全持股新增/剔除。</div>
     </section>
 
     <section class="table-wrap">
@@ -291,7 +289,7 @@
             </td>
             <td>
               <span class="pill {{ item.change_type }}">
-                {% if item.change_type == "add" %}新增{% elif item.change_type == "increase" %}加碼{% elif item.change_type == "decrease" %}減碼{% else %}剔除{% endif %}
+                {% if item.change_type == "enter_top10" %}進榜{% elif item.change_type == "increase" %}加碼{% elif item.change_type == "decrease" %}減碼{% else %}出榜{% endif %}
               </span>
             </td>
             <td class="{% if item.quantity_delta_lots > 0 %}pos{% elif item.quantity_delta_lots < 0 %}neg{% else %}muted{% endif %}">

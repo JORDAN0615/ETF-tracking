@@ -342,9 +342,9 @@ def _serialize_diff_row(row) -> dict:
     prev_quantity = payload["prev_quantity"]
     curr_quantity = payload["curr_quantity"]
     change_type = payload["change_type"]
-    if change_type == "add":
+    if change_type == "enter_top10":
         quantity_delta_pct = 100.0
-    elif change_type == "remove":
+    elif change_type == "exit_top10":
         quantity_delta_pct = -100.0
     elif prev_quantity in (None, 0):
         quantity_delta_pct = None
@@ -368,10 +368,10 @@ def get_diffs(ticker: str, trade_date: str) -> list[dict]:
             WHERE etf_ticker = ? AND trade_date = ?
             ORDER BY
                 CASE change_type
-                    WHEN 'add' THEN 1
+                    WHEN 'enter_top10' THEN 1
                     WHEN 'increase' THEN 2
                     WHEN 'decrease' THEN 3
-                    WHEN 'remove' THEN 4
+                    WHEN 'exit_top10' THEN 4
                     ELSE 5
                 END,
                 ABS(COALESCE(weight_delta, 0)) DESC,

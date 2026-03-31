@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -32,7 +33,7 @@ class CapitalPortfolioAdapter:
 
     def parse(self, raw_data: str, source_config: dict[str, Any]) -> tuple[str, list[Holding]]:
         soup = BeautifulSoup(raw_data, "html.parser")
-        trade_date = self._extract_trade_date(soup)
+        trade_date = self._extract_trade_date(soup, source_config)
         self._assert_target_date(source_config.get("target_date"), trade_date)
         rows = self._extract_stock_rows(soup)
 
@@ -51,12 +52,26 @@ class CapitalPortfolioAdapter:
 
         return trade_date, holdings
 
-    def _extract_trade_date(self, soup: BeautifulSoup) -> str:
+    def _extract_trade_date(self, soup: BeautifulSoup, source_config: dict[str, Any]) -> str:
         node = soup.select_one("#condition-date")
         value = node.get("value", "").strip() if node else ""
         if not value:
             raise ValueError("Unable to locate holdings date in Capital portfolio page")
-        return self._parse_date(value)
+        reported_date = self._parse_date(value)
+        return self._normalize_reported_date(reported_date, source_config)
+
+    def _normalize_reported_date(self, reported_date: str, source_config: dict[str, Any]) -> str:
+        # Capital portfolio page can expose same-day UI date before holdings are fully finalized.
+        if source_config.get("same_day_fallback_to_previous_day", True):
+            today_override = source_config.get("today_override")
+            if today_override:
+                today = datetime.fromisoformat(self._parse_date(str(today_override))).date()
+            else:
+                today = datetime.now(ZoneInfo("Asia/Taipei")).date()
+            parsed = datetime.fromisoformat(reported_date).date()
+            if parsed == today:
+                return (parsed - timedelta(days=1)).isoformat()
+        return reported_date
 
     def _extract_stock_rows(self, soup: BeautifulSoup) -> list[dict[str, Any]]:
         section = soup.select_one("#buyback-stocks-section")

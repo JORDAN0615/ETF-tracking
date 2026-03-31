@@ -34,7 +34,7 @@ def test_api_returns_holdings_and_diffs(client) -> None:
     diffs_response = client.get("/etfs/00980A/diffs", params={"date": "2026-03-28"})
     assert diffs_response.status_code == 200
     diffs = diffs_response.json()["diffs"]
-    assert {item["change_type"] for item in diffs} == {"add", "increase", "remove"}
+    assert {item["change_type"] for item in diffs} == {"enter_top10", "increase", "exit_top10"}
     assert diffs[0]["quantity_delta_lots"] is not None
 
 
@@ -92,7 +92,10 @@ def test_detail_page_shows_all_diff_columns(client) -> None:
     assert "+0.2 張" in html
     assert "權重變動 %" in html
     assert "目前權重" in html
-    assert "台灣主動式 ETF 追蹤系統試作版" not in html
+    assert "進榜" in html
+    assert "出榜" in html
+    assert "僅比較前10大持股，進出榜不等於全持股新增/剔除。" in html
+    assert "台灣主動式 ETF 追蹤系統" not in html
 
 
 def test_index_and_detail_do_not_show_removed_00994a(client) -> None:

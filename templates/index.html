@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>台灣主動式 ETF 追蹤系統試作版</title>
+  <title>台灣主動式 ETF 追蹤</title>
   <style>
     :root {
       --bg: #f4f1ea;
@@ -11,10 +11,10 @@
       --ink: #1e2b2f;
       --muted: #64727a;
       --line: #d7d0c3;
-      --add: #17633a;
+      --enter: #17633a;
       --increase: #215a8a;
       --decrease: #9b5d14;
-      --remove: #93323c;
+      --exit: #93323c;
     }
     * { box-sizing: border-box; }
     body {
@@ -86,8 +86,8 @@
       margin-top: 12px;
       font-weight: 600;
     }
-    .status.success { color: var(--add); }
-    .status.failed { color: var(--remove); }
+    .status.success { color: var(--enter); }
+    .status.failed { color: var(--exit); }
     .alert {
       margin-top: 12px;
       color: #93323c;
@@ -115,10 +115,10 @@
       font-size: 1.1rem;
       margin-bottom: 12px;
     }
-    .add h2 { color: var(--add); }
+    .enter_top10 h2 { color: var(--enter); }
     .increase h2 { color: var(--increase); }
     .decrease h2 { color: var(--decrease); }
-    .remove h2 { color: var(--remove); }
+    .exit_top10 h2 { color: var(--exit); }
     ul {
       margin: 0;
       padding-left: 18px;
@@ -130,14 +130,15 @@
 <body>
   <main class="wrap">
     <section class="hero">
-      <h1>台灣主動式 ETF 追蹤系統試作版</h1>
+      <h1>台灣主動式 ETF 追蹤系統</h1>
       <p>依公開持股差異推估，以下列出系統內所有 ETF 的最新 snapshot 與前一次成功 snapshot 變化。</p>
       <div class="hero-bar">
-        <p>每日 20:00 會自動抓取全部啟用 ETF，也可手動立即更新。</p>
+        <p>每日 20:00 會自動抓取全部啟用 ETF；若未更新，預設 30 分鐘後再重試一次。</p>
         <form method="post" action="/refresh">
           <button class="button" type="submit">立即更新全部 ETF</button>
         </form>
       </div>
+      <p class="meta" style="margin-top: 10px;">僅比較前10大持股，進出榜不等於全持股新增/剔除。</p>
     </section>
 
     <section class="etf-list">
@@ -180,13 +181,10 @@
         {% endif %}
         <div class="actions">
           <a class="button secondary" href="/etfs/{{ card.etf.ticker }}">查看日報</a>
-          <form method="post" action="/etfs/{{ card.etf.ticker }}/refresh">
-            <button class="button" type="submit">更新此 ETF</button>
-          </form>
         </div>
 
         <section class="grid">
-          {% for change_type, title in [("add", "新增"), ("increase", "加碼"), ("decrease", "減碼"), ("remove", "剔除")] %}
+          {% for change_type, title in [("enter_top10", "進榜"), ("increase", "加碼"), ("decrease", "減碼"), ("exit_top10", "出榜")] %}
           <article class="card {{ change_type }}">
             <h2>{{ title }}</h2>
             {% if card.grouped_diffs[change_type] %}

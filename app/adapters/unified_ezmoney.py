@@ -12,6 +12,7 @@ from app.models import Holding
 
 
 class UnifiedEzmoneyAdapter:
+    MAX_HOLDINGS = 50
     DATA_ASSET_PATTERN = re.compile(
         r'<div[^>]*id="DataAsset"[^>]*data-content="(.*?)"[^>]*style=',
         re.S,
@@ -68,6 +69,16 @@ class UnifiedEzmoneyAdapter:
 
         if not holdings:
             raise ValueError("Unified ETF holdings block was present but no rows were parsed")
+
+        holdings = sorted(
+            holdings,
+            key=lambda item: (
+                item.weight is None,
+                -(item.weight or 0.0),
+                -(item.quantity or 0.0),
+                item.instrument_key,
+            ),
+        )[: self.MAX_HOLDINGS]
 
         return trade_date, holdings
 

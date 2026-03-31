@@ -34,7 +34,11 @@ def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
-def _validate_snapshot(ticker: str, trade_date: str, holdings: list[Holding]) -> None:
+def _validate_snapshot(
+    ticker: str,
+    trade_date: str,
+    holdings: list[Holding],
+) -> None:
     if not trade_date:
         raise ValueError("Missing trade_date from source data")
     if not holdings:

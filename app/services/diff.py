@@ -5,13 +5,31 @@ from typing import Iterable
 from app.models import Holding, HoldingDiff
 
 
+TOP_HOLDINGS_LIMIT = 10
+
+
+def _top_holdings(holdings: Iterable[Holding], limit: int = TOP_HOLDINGS_LIMIT) -> list[Holding]:
+    ranked = sorted(
+        holdings,
+        key=lambda item: (
+            item.weight is None,
+            -(item.weight or 0.0),
+            -(item.quantity or 0.0),
+            item.instrument_key,
+        ),
+    )
+    return ranked[:limit]
+
+
 def _index_holdings(holdings: Iterable[Holding]) -> dict[str, Holding]:
     return {holding.instrument_key: holding for holding in holdings}
 
 
 def build_diffs(previous: Iterable[Holding], current: Iterable[Holding]) -> list[HoldingDiff]:
-    previous_map = _index_holdings(previous)
-    current_map = _index_holdings(current)
+    previous_top = _top_holdings(previous)
+    current_top = _top_holdings(current)
+    previous_map = _index_holdings(previous_top)
+    current_map = _index_holdings(current_top)
 
     diffs: list[HoldingDiff] = []
     all_keys = sorted(set(previous_map) | set(current_map))
@@ -31,9 +49,9 @@ def build_diffs(previous: Iterable[Holding], current: Iterable[Holding]) -> list
         )
 
         if prev_item is None and curr_item is not None:
-            change_type = "add"
+            change_type = "enter_top10"
         elif curr_item is None and prev_item is not None:
-            change_type = "remove"
+            change_type = "exit_top10"
         elif quantity_delta > 0:
             change_type = "increase"
         elif quantity_delta < 0:

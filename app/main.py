@@ -25,6 +25,7 @@ from app.repositories import (
     seed_default_data,
 )
 from app.services.ingest import ingest_latest_snapshot, refresh_active_etfs
+from app.services.maintenance import lock_00992a_baseline
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,6 +53,27 @@ def _format_lots(value: Optional[float]) -> str:
 templates.env.filters["format_lots"] = _format_lots
 
 
+def _diff_weight_value(diff: dict) -> float:
+    if diff.get("curr_weight") is not None:
+        return float(diff["curr_weight"])
+    if diff.get("prev_weight") is not None:
+        return float(diff["prev_weight"])
+    return -1.0
+
+
+def _top_weight_diffs(diffs: list[dict], limit: int = 10) -> list[dict]:
+    ranked = sorted(
+        diffs,
+        key=lambda item: (
+            _diff_weight_value(item),
+            abs(item.get("quantity_delta_lots") or 0.0),
+            item.get("instrument_key", ""),
+        ),
+        reverse=True,
+    )
+    return ranked[:limit]
+
+
 async def _scheduler_loop() -> None:
     while True:
         now = datetime.now(TAIPEI_TZ)
@@ -59,7 +81,40 @@ async def _scheduler_loop() -> None:
         if next_run <= now:
             next_run = next_run + timedelta(days=1)
         await asyncio.sleep((next_run - now).total_seconds())
-        await asyncio.to_thread(refresh_active_etfs, "scheduled")
+        await asyncio.to_thread(_run_scheduled_refresh_with_retry)
+
+
+def _run_scheduled_refresh_with_retry() -> None:
+    before_dates = {
+        etf["ticker"]: etf.get("latest_trade_date")
+        for etf in list_etfs()
+        if etf.get("is_active")
+    }
+    first_pass = refresh_active_etfs("scheduled")
+    retry_candidates: list[str] = []
+    for result in first_pass.get("results", []):
+        ticker = result.get("ticker")
+        if not ticker:
+            continue
+        previous_date = before_dates.get(ticker)
+        current_date = result.get("trade_date")
+        status = result.get("status")
+        # Retry once when refresh failed or trade_date did not move forward.
+        if status != "success" or current_date is None or current_date == previous_date:
+            retry_candidates.append(ticker)
+
+    if not retry_candidates:
+        return
+
+    retry_delay_seconds = int(os.getenv("ETF_TRACKING_SCHEDULE_RETRY_DELAY_SECONDS", "1800"))
+    if retry_delay_seconds > 0:
+        # Sleep in the scheduler worker thread before a single retry pass.
+        import time
+
+        time.sleep(retry_delay_seconds)
+
+    for ticker in retry_candidates:
+        ingest_latest_snapshot(ticker, trigger_type="scheduled_retry")
 
 
 @asynccontextmanager
@@ -67,6 +122,7 @@ async def lifespan(app_instance: FastAPI):
     init_db()
     remove_etf("00994A")
     seed_default_data()
+    lock_00992a_baseline()
     scheduler_task = None
     if os.getenv("ETF_TRACKING_DISABLE_SCHEDULER") != "1":
         scheduler_task = asyncio.create_task(_scheduler_loop())
@@ -147,11 +203,12 @@ def _build_card(etf_item: dict, today: str) -> dict:
     latest_fetched_at = metadata["fetched_at"] if metadata else None
     latest_run = get_latest_crawl_run(etf_item["ticker"])
     diffs = get_diffs(etf_item["ticker"], latest_date) if latest_date else []
+    display_diffs = _top_weight_diffs(diffs, limit=10)
     grouped = {
-        "add": [diff for diff in diffs if diff["change_type"] == "add"],
-        "increase": [diff for diff in diffs if diff["change_type"] == "increase"],
-        "decrease": [diff for diff in diffs if diff["change_type"] == "decrease"],
-        "remove": [diff for diff in diffs if diff["change_type"] == "remove"],
+        "enter_top10": [diff for diff in display_diffs if diff["change_type"] == "enter_top10"],
+        "increase": [diff for diff in display_diffs if diff["change_type"] == "increase"],
+        "decrease": [diff for diff in display_diffs if diff["change_type"] == "decrease"],
+        "exit_top10": [diff for diff in display_diffs if diff["change_type"] == "exit_top10"],
     }
     return {
         "etf": get_etf(etf_item["ticker"]),
@@ -159,6 +216,7 @@ def _build_card(etf_item: dict, today: str) -> dict:
         "latest_fetched_at": latest_fetched_at,
         "latest_fetched_at_display": _format_datetime(latest_fetched_at),
         "is_stale": bool(latest_date and latest_date != today),
+        "display_diffs": display_diffs,
         "grouped_diffs": grouped,
         "summary": {key: len(value) for key, value in grouped.items()},
         "last_run_status": latest_run["status"] if latest_run else None,
@@ -198,13 +256,11 @@ def etf_detail(request: Request, ticker: str) -> HTMLResponse:
 
     today = datetime.now().date().isoformat()
     card = _build_card(etf, today)
-    latest_date = card["latest_date"]
-    diffs = get_diffs(ticker, latest_date) if latest_date else []
     return templates.TemplateResponse(
         request,
         "detail.html",
         {
             "card": card,
-            "diffs": diffs,
+            "diffs": card["display_diffs"],
         },
     )

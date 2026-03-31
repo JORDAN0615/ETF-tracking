@@ -13,9 +13,10 @@ class NomuraEtfWebAdapter:
     API_URL = "https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets"
 
     def fetch(self, source_url: str, source_config: dict[str, Any]) -> str:
+        search_date = source_config.get("search_date") or source_config.get("target_date")
         payload = {
             "FundID": source_config.get("fund_no"),
-            "SearchDate": source_config.get("search_date"),
+            "SearchDate": search_date,
         }
         response = requests.post(
             self.API_URL,
