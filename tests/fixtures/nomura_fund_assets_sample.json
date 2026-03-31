@@ -1,0 +1,33 @@
+{
+  "TotalPages": -1,
+  "TotalItems": 0,
+  "Entries": {
+    "FundID": "00980A",
+    "Data": {
+      "FundAsset": {
+        "Aum": "11969652417",
+        "Units": "689730000",
+        "Nav": "17.35",
+        "NavDate": "2026/03/30"
+      },
+      "Table": [
+        {
+          "TableTitle": "股票",
+          "Columns": [
+            {"Name": "股票代號", "TextAlign": "center"},
+            {"Name": "股票名稱", "TextAlign": "center"},
+            {"Name": "股數", "TextAlign": "center"},
+            {"Name": "權重(%)", "TextAlign": "center"}
+          ],
+          "Rows": [
+            ["2330", "台灣積體電路製造", "583000", "8.67"],
+            ["2308", "台達電子工業", "306000", "3.8"]
+          ]
+        }
+      ],
+      "BondProperty": null
+    }
+  },
+  "Message": "",
+  "StatusCode": 0
+}
