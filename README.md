@@ -15,9 +15,23 @@ uvicorn app.main:app --reload
 ## Deploy (Vercel)
 
 - 已內建 `vercel.json` 與 `api/index.py`，可直接部署 FastAPI。
-- Vercel 上會自動使用 `/tmp/etf_tracking.db`（Serverless 可寫路徑）。
+- 設定 `DATABASE_URL` 後會直接使用 Postgres（建議 Supabase）。
+- 若未設定 `DATABASE_URL` 才會 fallback 到本地 SQLite（Vercel 為 `/tmp/etf_tracking.db`）。
 - Vercel 上會自動關閉 app 內建排程器（避免 serverless 背景任務問題）。
 - 建議在 Vercel 專案環境變數加上：`ETF_TRACKING_DISABLE_SCHEDULER=1`（雙重保險）。
+
+## SQLite -> Supabase Migration
+
+1. 先在 Supabase 建好四張表：`etfs`, `holdings_snapshots`, `holding_diffs`, `crawl_runs`。
+2. 執行一次性 migration 腳本：
+
+```bash
+.venv/bin/python scripts/migrate_sqlite_to_supabase.py \
+  --sqlite-path data/etf_tracking.db \
+  --database-url "$DATABASE_URL"
+```
+
+腳本會依序搬 `etfs -> holdings_snapshots -> holding_diffs -> crawl_runs`，並輸出搬遷前後 row count 與抽樣核對結果。
 
 ## System Behavior
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import Iterable, Optional
 
-from app.db import get_connection
+from app.db import get_connection, is_postgres
 from app.models import ETF, Holding, HoldingDiff
 
 
@@ -47,34 +47,63 @@ DEFAULT_ETFS = [
 ]
 
 
+def _normalize_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _row_to_dict(row) -> dict:
+    return {key: _normalize_value(value) for key, value in dict(row).items()}
+
+
 def _deserialize_etf(row) -> dict:
-    etf = dict(row)
-    etf["source_config"] = json.loads(etf["source_config"])
+    etf = _row_to_dict(row)
+    source_config = etf.get("source_config")
+    if isinstance(source_config, str):
+        etf["source_config"] = json.loads(source_config)
+    else:
+        etf["source_config"] = source_config or {}
     etf["is_active"] = bool(etf["is_active"])
     return etf
 
 
 def seed_default_data() -> None:
-    with get_connection() as connection:
-        connection.executemany(
-            """
-            INSERT OR IGNORE INTO etfs (
-                ticker, name, source_type, source_url, source_config, is_active
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    etf.ticker,
-                    etf.name,
-                    etf.source_type,
-                    etf.source_url,
-                    json.dumps(etf.source_config, ensure_ascii=True),
-                    int(etf.is_active),
-                )
-                for etf in DEFAULT_ETFS
-            ],
+    seed_rows = [
+        (
+            etf.ticker,
+            etf.name,
+            etf.source_type,
+            etf.source_url,
+            json.dumps(etf.source_config, ensure_ascii=True),
+            int(etf.is_active),
         )
+        for etf in DEFAULT_ETFS
+    ]
+    with get_connection() as connection:
+        if is_postgres():
+            connection.executemany(
+                """
+                INSERT INTO etfs (
+                    ticker, name, source_type, source_url, source_config, is_active
+                )
+                VALUES (?, ?, ?, ?, ?::jsonb, ?::boolean)
+                ON CONFLICT (ticker) DO NOTHING
+                """,
+                seed_rows,
+            )
+        else:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO etfs (
+                    ticker, name, source_type, source_url, source_config, is_active
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                seed_rows,
+            )
 
 
 def remove_etf(ticker: str) -> None:
@@ -175,7 +204,7 @@ def get_snapshot(ticker: str, trade_date: str) -> list[dict]:
             """,
             (ticker, trade_date),
         ).fetchall()
-    return [dict(row) for row in rows]
+    return [_row_to_dict(row) for row in rows]
 
 
 def get_previous_trade_date(ticker: str, trade_date: str) -> Optional[str]:
@@ -338,7 +367,7 @@ def record_crawl_run(
 
 
 def _serialize_diff_row(row) -> dict:
-    payload = dict(row)
+    payload = _row_to_dict(row)
     prev_quantity = payload["prev_quantity"]
     curr_quantity = payload["curr_quantity"]
     change_type = payload["change_type"]
@@ -394,7 +423,7 @@ def get_latest_snapshot_date(ticker: str) -> Optional[str]:
             """,
             (ticker,),
         ).fetchone()
-    return row["trade_date"] if row else None
+    return _normalize_value(row["trade_date"]) if row else None
 
 
 def get_latest_snapshot_metadata(ticker: str) -> Optional[dict]:
@@ -409,7 +438,7 @@ def get_latest_snapshot_metadata(ticker: str) -> Optional[dict]:
             """,
             (ticker,),
         ).fetchone()
-    return dict(row) if row else None
+    return _row_to_dict(row) if row else None
 
 
 def get_snapshot_metadata(ticker: str, trade_date: str) -> Optional[dict]:
@@ -423,7 +452,7 @@ def get_snapshot_metadata(ticker: str, trade_date: str) -> Optional[dict]:
             """,
             (ticker, trade_date),
         ).fetchone()
-    return dict(row) if row else None
+    return _row_to_dict(row) if row else None
 
 
 def get_latest_snapshot_count(ticker: str) -> Optional[int]:
@@ -458,4 +487,4 @@ def get_latest_crawl_run(ticker: str) -> Optional[dict]:
             """,
             (ticker,),
         ).fetchone()
-    return dict(row) if row else None
+    return _row_to_dict(row) if row else None
