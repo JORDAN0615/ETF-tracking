@@ -71,7 +71,18 @@ def _deserialize_etf(row) -> dict:
 
 
 def seed_default_data() -> None:
-    seed_rows = [
+    seed_rows_pg = [
+        (
+            etf.ticker,
+            etf.name,
+            etf.source_type,
+            etf.source_url,
+            json.dumps(etf.source_config, ensure_ascii=True),
+            bool(etf.is_active),
+        )
+        for etf in DEFAULT_ETFS
+    ]
+    seed_rows_sqlite = [
         (
             etf.ticker,
             etf.name,
@@ -92,7 +103,7 @@ def seed_default_data() -> None:
                 VALUES (?, ?, ?, ?, ?::jsonb, ?::boolean)
                 ON CONFLICT (ticker) DO NOTHING
                 """,
-                seed_rows,
+                seed_rows_pg,
             )
         else:
             connection.executemany(
@@ -102,7 +113,7 @@ def seed_default_data() -> None:
                 )
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                seed_rows,
+                seed_rows_sqlite,
             )
 
 

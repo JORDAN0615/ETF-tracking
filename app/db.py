@@ -27,7 +27,9 @@ class PostgresCompatConnection:
         return self._connection.execute(adapted, params)
 
     def executemany(self, query: str, params_seq):
-        return self._connection.executemany(self._adapt_query(query), params_seq)
+        with self._connection.cursor() as cursor:
+            cursor.executemany(self._adapt_query(query), params_seq)
+            return cursor
 
     def __enter__(self):
         self._connection.__enter__()
