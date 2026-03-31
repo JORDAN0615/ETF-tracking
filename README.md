@@ -12,6 +12,13 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+## Deploy (Vercel)
+
+- 已內建 `vercel.json` 與 `api/index.py`，可直接部署 FastAPI。
+- Vercel 上會自動使用 `/tmp/etf_tracking.db`（Serverless 可寫路徑）。
+- Vercel 上會自動關閉 app 內建排程器（避免 serverless 背景任務問題）。
+- 建議在 Vercel 專案環境變數加上：`ETF_TRACKING_DISABLE_SCHEDULER=1`（雙重保險）。
+
 ## System Behavior
 
 - 每日 `20:00`（台北時區）自動抓取所有啟用 ETF。

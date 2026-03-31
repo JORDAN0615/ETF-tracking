@@ -12,6 +12,9 @@ def get_db_path() -> Path:
     override = os.getenv("ETF_TRACKING_DB_PATH")
     if override:
         return Path(override)
+    # Vercel serverless file system is read-only except /tmp.
+    if os.getenv("VERCEL") == "1":
+        return Path("/tmp/etf_tracking.db")
     return BASE_DIR / "data" / "etf_tracking.db"
 
 

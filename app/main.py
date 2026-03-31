@@ -124,7 +124,8 @@ async def lifespan(app_instance: FastAPI):
     seed_default_data()
     lock_00992a_baseline()
     scheduler_task = None
-    if os.getenv("ETF_TRACKING_DISABLE_SCHEDULER") != "1":
+    scheduler_disabled = os.getenv("ETF_TRACKING_DISABLE_SCHEDULER") == "1" or os.getenv("VERCEL") == "1"
+    if not scheduler_disabled:
         scheduler_task = asyncio.create_task(_scheduler_loop())
         app_instance.state.scheduler_task = scheduler_task
     try:
