@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from datetime import date, datetime
 from typing import Iterable, Optional
 
@@ -48,6 +49,8 @@ DEFAULT_ETFS = [
 
 
 def _normalize_value(value):
+    if isinstance(value, Decimal):
+        return float(value)
     if isinstance(value, datetime):
         return value.isoformat(timespec="seconds")
     if isinstance(value, date):
@@ -230,7 +233,7 @@ def get_previous_trade_date(ticker: str, trade_date: str) -> Optional[str]:
             """,
             (ticker, trade_date),
         ).fetchone()
-    return row["trade_date"] if row else None
+    return _normalize_value(row["trade_date"]) if row else None
 
 
 def save_diffs(ticker: str, trade_date: str, diffs: Iterable[HoldingDiff]) -> None:

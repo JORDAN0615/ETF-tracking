@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.models import Holding
 from app.services.diff import build_diffs
 
@@ -48,3 +50,14 @@ def test_build_diffs_only_uses_top10_from_each_day() -> None:
     assert "1909" in keys
     # Item outside both top10 sets should not appear.
     assert "1011" not in keys
+
+
+def test_build_diffs_accepts_decimal_and_float_mixed_numbers() -> None:
+    previous = [Holding("2330", "台積電", "stock", Decimal("1000"), Decimal("10.0"))]
+    current = [Holding("2330", "台積電", "stock", 1200.0, 10.5)]
+
+    diffs = build_diffs(previous, current)
+
+    assert len(diffs) == 1
+    assert diffs[0].change_type == "increase"
+    assert diffs[0].quantity_delta == 200.0
