@@ -4,4 +4,6 @@ __pycache__/
 *.pyc
 *.xlsx
 etf_tracking.db
+.env
+.env.*
 data/
