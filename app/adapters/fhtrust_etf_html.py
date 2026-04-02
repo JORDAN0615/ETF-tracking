@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Any, Optional
 from zipfile import ZipFile
+from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ET
 
 import requests
@@ -34,19 +35,25 @@ class FhtrustEtfHtmlAdapter:
         excel_bytes: bytes | None = None
         excel_path = self._extract_assets_excel_path(html, source_config)
         if excel_path:
-            excel_url = requests.compat.urljoin(source_url, excel_path)
-            excel_response = requests.get(
-                excel_url,
-                timeout=15,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
-                    )
-                },
-            )
-            if excel_response.ok and excel_response.content:
-                excel_bytes = excel_response.content
+            # If no explicit target_date, also probe newer dates beyond what the HTML links to.
+            # fhtrust's page HTML can be slow to update its Excel links even after new data
+            # is available via the API.
+            excel_candidates = self._newer_excel_candidates(excel_path, source_url, source_config)
+            for candidate_url in excel_candidates:
+                excel_response = requests.get(
+                    candidate_url,
+                    timeout=15,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+                        )
+                    },
+                )
+                # Validate it's a real XLSX (ZIP) file, not a JSON error response.
+                if excel_response.ok and excel_response.content[:2] == b"PK":
+                    excel_bytes = excel_response.content
+                    break
 
         return {"html": html, "excel_bytes": excel_bytes}
 
@@ -107,9 +114,21 @@ class FhtrustEtfHtmlAdapter:
         if etf_id and target_date:
             return f"/api/assetsExcel/{etf_id}/{target_date.strftime('%Y%m%d')}"
 
-        match = re.search(r'href=["\'](/api/assetsExcel/[^"\']+)["\']', html)
-        if match:
-            return match.group(1)
+        # Find all Excel hrefs on the page and pick the one with the latest date.
+        excel_hrefs = re.findall(r'href=["\'](/api/assetsExcel/[^"\']+)["\']', html)
+        if excel_hrefs:
+            date_from_path = re.compile(r"/(\d{8})$")
+            candidates: list[tuple[date, str]] = []
+            for href in excel_hrefs:
+                m = date_from_path.search(href)
+                if m:
+                    try:
+                        candidates.append((datetime.strptime(m.group(1), "%Y%m%d").date(), href))
+                    except ValueError:
+                        pass
+            if candidates:
+                return max(candidates, key=lambda x: x[0])[1]
+            return excel_hrefs[-1]
         if not etf_id:
             return None
         date_matches = self.DATE_PATTERN.findall(html)
@@ -178,6 +197,43 @@ class FhtrustEtfHtmlAdapter:
         if not holdings:
             raise ValueError("FH Trust assets excel did not contain any holdings rows")
         return trade_date, holdings
+
+    def _newer_excel_candidates(
+        self, html_excel_path: str, source_url: str, source_config: dict[str, Any]
+    ) -> list[str]:
+        """Return a list of Excel URLs to try, newest first.
+
+        When no target_date is set, the HTML-linked Excel may lag behind the API.
+        We probe up to 3 calendar days ahead of the HTML-linked date to find newer data.
+        """
+        etf_id = source_config.get("etf_id")
+        target_date = self._normalize_target_date(source_config.get("target_date"))
+
+        # If an explicit target_date was given, just use the HTML-derived path as-is.
+        if target_date or not etf_id:
+            return [requests.compat.urljoin(source_url, html_excel_path)]
+
+        date_in_path = re.search(r"/(\d{8})$", html_excel_path)
+        if not date_in_path:
+            return [requests.compat.urljoin(source_url, html_excel_path)]
+
+        try:
+            base_date = datetime.strptime(date_in_path.group(1), "%Y%m%d").date()
+        except ValueError:
+            return [requests.compat.urljoin(source_url, html_excel_path)]
+
+        today = datetime.now(ZoneInfo("Asia/Taipei")).date()
+        candidates: list[str] = []
+        probe = base_date + timedelta(days=1)
+        while probe <= today:
+            path = f"/api/assetsExcel/{etf_id}/{probe.strftime('%Y%m%d')}"
+            candidates.append(requests.compat.urljoin(source_url, path))
+            probe += timedelta(days=1)
+
+        # Probe newest first, fall back to what the HTML linked
+        candidates.reverse()
+        candidates.append(requests.compat.urljoin(source_url, html_excel_path))
+        return candidates
 
     def _normalize_target_date(self, raw_target_date: Any) -> Optional[date]:
         if not raw_target_date:

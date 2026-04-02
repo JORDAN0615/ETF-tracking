@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from app.adapters import get_adapter
 from app.models import Holding
@@ -32,6 +33,22 @@ def _rows_to_holdings(rows: list[dict]) -> list[Holding]:
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _normalize_trade_date(trade_date: str, trust_today: bool = False) -> str:
+    """
+    When trust_today is False (default), if the adapter returns today's date
+    (Asia/Taipei), fall back to yesterday — the site is likely showing today's
+    date before the holdings have been updated (which happens after market close).
+    Scheduled runs pass trust_today=True to accept today's data once published.
+    """
+    if trust_today:
+        return trade_date
+    today = datetime.now(ZoneInfo("Asia/Taipei")).date()
+    parsed = datetime.fromisoformat(trade_date).date()
+    if parsed == today:
+        return (parsed - timedelta(days=1)).isoformat()
+    return trade_date
 
 
 def _validate_snapshot(
@@ -69,6 +86,7 @@ def ingest_latest_snapshot(
     ticker: str,
     trigger_type: str = "manual",
     target_date: Optional[str] = None,
+    trust_today: bool = False,
 ) -> dict:
     etf = get_etf(ticker)
     if not etf:
@@ -83,6 +101,7 @@ def ingest_latest_snapshot(
         adapter = get_adapter(etf["source_type"])
         raw_data = adapter.fetch(etf["source_url"], source_config)
         trade_date, holdings = adapter.parse(raw_data, source_config)
+        trade_date = _normalize_trade_date(trade_date, trust_today=trust_today)
         _validate_snapshot(ticker, trade_date, holdings)
 
         previous_trade_date = get_previous_trade_date(ticker, trade_date)
@@ -131,12 +150,12 @@ def ingest_latest_snapshot(
     }
 
 
-def refresh_active_etfs(trigger_type: str = "manual") -> dict:
+def refresh_active_etfs(trigger_type: str = "manual", trust_today: bool = False) -> dict:
     results = []
     for etf in list_etfs():
         if not etf["is_active"]:
             continue
-        results.append(ingest_latest_snapshot(etf["ticker"], trigger_type=trigger_type))
+        results.append(ingest_latest_snapshot(etf["ticker"], trigger_type=trigger_type, trust_today=trust_today))
     return {
         "trigger_type": trigger_type,
         "refreshed_at": _now_iso(),

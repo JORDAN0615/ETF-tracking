@@ -33,6 +33,102 @@ uvicorn app.main:app --reload
 
 腳本會依序搬 `etfs -> holdings_snapshots -> holding_diffs -> crawl_runs`，並輸出搬遷前後 row count 與抽樣核對結果。
 
+## Production Runbook (Supabase)
+
+### 1) 正式環境設定
+- Vercel `Environment Variables` 需設定：
+  - `DATABASE_URL=<supabase postgres uri>`
+  - `ETF_TRACKING_DISABLE_SCHEDULER=1`
+- 使用 Supabase transaction pooler 時，連線端會關閉 prepared statements（程式已處理）。
+
+### 2) 本機連線測試（與正式同一個 Supabase）
+先在專案根目錄建立 `.env`：
+
+```env
+DATABASE_URL=postgresql://...
+ETF_TRACKING_DISABLE_SCHEDULER=1
+```
+
+載入環境變數：
+
+```bash
+set -a; source .env; set +a
+```
+
+測試 DB 連線：
+
+```bash
+.venv/bin/python - <<'PY'
+import os, psycopg
+with psycopg.connect(os.environ["DATABASE_URL"], prepare_threshold=None) as conn:
+    with conn.cursor() as cur:
+        cur.execute("select current_database(), current_user")
+        print(cur.fetchone())
+PY
+```
+
+### 3) 正式資料搬遷與驗證
+執行一次性 migration：
+
+```bash
+.venv/bin/python scripts/migrate_sqlite_to_supabase.py \
+  --sqlite-path data/etf_tracking.db \
+  --database-url "$DATABASE_URL"
+```
+
+驗證表筆數（SQLite vs Supabase）應一致：
+- `etfs`
+- `holdings_snapshots`
+- `holding_diffs`
+- `crawl_runs`
+
+### 4) 應用層 smoke test（正式 API）
+部署後檢查：
+
+```bash
+curl -sS https://<your-vercel-domain>/health
+curl -sS https://<your-vercel-domain>/etfs
+curl -sS "https://<your-vercel-domain>/etfs/00992A/diffs?date=2026-03-30"
+```
+
+### 5) 資料正確性檢查（SQL）
+檢查各 ticker snapshot 分布：
+
+```sql
+select etf_ticker, trade_date, count(*) as c
+from holdings_snapshots
+group by etf_ticker, trade_date
+order by etf_ticker, trade_date;
+```
+
+檢查指定 ticker 的 diff 結果：
+
+```sql
+select etf_ticker, trade_date, change_type, count(*) as c
+from holding_diffs
+where etf_ticker in ('00981A', '00992A')
+group by etf_ticker, trade_date, change_type
+order by etf_ticker, trade_date, change_type;
+```
+
+檢查 00992A 兩日 top10 成分是否一致：
+
+```sql
+select trade_date, instrument_key, instrument_name, quantity, weight
+from holdings_snapshots
+where etf_ticker='00992A'
+  and trade_date in ('2026-03-27', '2026-03-30')
+order by trade_date, weight desc, instrument_key;
+```
+
+### 6) 常見問題
+- `unsupported operand type(s) for -: 'float' and 'decimal.Decimal'`：
+  - 已修正為在 repository/diff 層統一數值型別，更新到最新版本即可。
+- `CannotCoerce ... smallint to boolean`：
+  - 已修正 seed 在 Postgres 使用 boolean 寫入。
+- pooler prepared statement 衝突：
+  - 已在 Postgres 連線設定 `prepare_threshold=None`。
+
 ## System Behavior
 
 - 每日 `20:00`（台北時區）自動抓取所有啟用 ETF。

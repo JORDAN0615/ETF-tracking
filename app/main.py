@@ -90,7 +90,7 @@ def _run_scheduled_refresh_with_retry() -> None:
         for etf in list_etfs()
         if etf.get("is_active")
     }
-    first_pass = refresh_active_etfs("scheduled")
+    first_pass = refresh_active_etfs("scheduled", trust_today=True)
     retry_candidates: list[str] = []
     for result in first_pass.get("results", []):
         ticker = result.get("ticker")
@@ -114,7 +114,7 @@ def _run_scheduled_refresh_with_retry() -> None:
         time.sleep(retry_delay_seconds)
 
     for ticker in retry_candidates:
-        ingest_latest_snapshot(ticker, trigger_type="scheduled_retry")
+        ingest_latest_snapshot(ticker, trigger_type="scheduled_retry", trust_today=True)
 
 
 @asynccontextmanager
