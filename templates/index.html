@@ -126,6 +126,7 @@
     li { margin-bottom: 8px; }
     .empty { color: var(--muted); }
   </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
   <main class="wrap">
@@ -208,5 +209,64 @@
       {% endfor %}
     </section>
   </main>
+
+    <!-- line Chart -->
+    <div class="chart-container" style="margin: 2rem 0; padding: 1rem; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <h3 style="margin-top: 0; color: #333;">並行開發測試 Chart</h3>
+        <canvas id="line_chart"></canvas>
+    </div>
+    
+    <script>
+    (function() {
+        const ctx = document.getElementById('line_chart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '測試數據',
+                    data: [],
+                    backgroundColor: '#ea4335',
+                    fill: false,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Fetch data from: /etfs/test-parallel
+        // TODO: Implement data fetching and chart update
+    })();
+    </script>
+
 </body>
 </html>

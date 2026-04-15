@@ -26,6 +26,22 @@ from app.repositories import (
 )
 from app.services.ingest import ingest_latest_snapshot, refresh_active_etfs
 from app.services.maintenance import lock_00992a_baseline
+from app.services.export import (
+    export_diffs_csv,
+    export_diffs_json,
+    export_etf_summary_json,
+    export_holdings_csv,
+    export_holdings_json,
+    export_statistics_json,
+)
+from app.services.notifications import create_telegram_notifier
+from app.services.statistics import (
+    get_etf_statistics,
+    get_all_etfs_statistics,
+    get_holding_history,
+    get_weight_chart_data,
+    get_weight_trend,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -137,7 +153,12 @@ async def lifespan(app_instance: FastAPI):
                 await scheduler_task
 
 
-app = FastAPI(title="Taiwan Active ETF Tracker Prototype", lifespan=lifespan)
+app = FastAPI(
+    title="Taiwan Active ETF Tracker",
+    description="追蹤台灣主動式 ETF 持股變動的 API 系統",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 
 @app.get("/health")
@@ -265,3 +286,149 @@ def etf_detail(request: Request, ticker: str) -> HTMLResponse:
             "diffs": card["display_diffs"],
         },
     )
+
+
+# ============================================================================
+# Enhanced API Endpoints - Statistics & Analysis
+# ============================================================================
+
+@app.get("/etfs/{ticker}/statistics")
+def get_statistics(ticker: str) -> dict:
+    """Get statistics for an ETF (concentration, turnover metrics)."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    return get_etf_statistics(ticker)
+
+
+@app.get("/etfs/statistics")
+def get_all_statistics() -> list[dict]:
+    """Get statistics for all ETFs."""
+    return get_all_etfs_statistics()
+
+
+@app.get("/etfs/{ticker}/history")
+def get_history(
+    ticker: str,
+    instrument_key: Optional[str] = Query(None, description="Filter by specific instrument"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of records")
+) -> dict:
+    """Get historical holding data for trend analysis."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    history = get_holding_history(ticker, instrument_key=instrument_key, limit=limit)
+    return {
+        "ticker": ticker,
+        "instrument_key": instrument_key,
+        "history": history,
+    }
+
+
+@app.get("/etfs/{ticker}/chart-data")
+def get_chart_data(
+    ticker: str,
+    limit: int = Query(30, ge=5, le=60, description="Number of recent trading days"),
+) -> dict:
+    """Get pre-structured chart data for weight trend and concentration analysis."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    return get_weight_chart_data(ticker, limit)
+
+
+@app.get("/etfs/{ticker}/trend/{instrument_key}")
+def get_trend(ticker: str, instrument_key: str) -> dict:
+    """Get weight trend for a specific instrument over time."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    trend = get_weight_trend(ticker, instrument_key)
+    return {
+        "ticker": ticker,
+        "instrument_key": instrument_key,
+        "trend": trend,
+    }
+
+
+# ============================================================================
+# Export API Endpoints
+# ============================================================================
+
+@app.get("/etfs/{ticker}/holdings/export/csv")
+def export_holdings_as_csv(ticker: str, date: str = Query(..., alias="date")):
+    """Export holdings as CSV file."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    holdings = get_snapshot(ticker, date)
+    if not holdings:
+        raise HTTPException(status_code=404, detail=f"No holdings found for {ticker} on {date}")
+    
+    return export_holdings_csv(holdings)
+
+
+@app.get("/etfs/{ticker}/holdings/export/json")
+def export_holdings_as_json(ticker: str, date: str = Query(..., alias="date")):
+    """Export holdings as JSON file."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    holdings = get_snapshot(ticker, date)
+    if not holdings:
+        raise HTTPException(status_code=404, detail=f"No holdings found for {ticker} on {date}")
+    
+    return export_holdings_json(holdings)
+
+
+@app.get("/etfs/{ticker}/diffs/export/csv")
+def export_diffs_as_csv(ticker: str, date: str = Query(..., alias="date")):
+    """Export holding diffs as CSV file."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    diffs = get_diffs(ticker, date)
+    return export_diffs_csv(diffs)
+
+
+@app.get("/etfs/{ticker}/diffs/export/json")
+def export_diffs_as_json(ticker: str, date: str = Query(..., alias="date")):
+    """Export holding diffs as JSON file."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    diffs = get_diffs(ticker, date)
+    return export_diffs_json(diffs)
+
+
+@app.get("/etfs/export/json")
+def export_all_etfs_json():
+    """Export all ETF summary as JSON file."""
+    etfs = list_etfs()
+    return export_etf_summary_json(etfs)
+
+
+@app.get("/etfs/{ticker}/statistics/export/json")
+def export_statistics_as_json(ticker: str):
+    """Export ETF statistics as JSON file."""
+    etf = get_etf(ticker)
+    if not etf:
+        raise HTTPException(status_code=404, detail=f"Unknown ETF ticker: {ticker}")
+    
+    stats = get_etf_statistics(ticker)
+    return export_statistics_json(stats)
+
+
+# New endpoint: GET /etfs/test-parallel
+
+@app.get('/etfs/test-parallel')
+def test_parallel() -> dict:
+    """Test parallel development endpoint."""
+    return {'status': 'ok', 'parallel': True}
+
