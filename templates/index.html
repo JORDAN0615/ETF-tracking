@@ -125,7 +125,39 @@
     }
     li { margin-bottom: 8px; }
     .empty { color: var(--muted); }
+    .overlap-section { margin-top: 32px; }
+    .overlap-title {
+      font-size: 1.1rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 14px; padding-left: 4px;
+    }
+    .overlap-card {
+      background: rgba(255, 253, 248, 0.92); border: 1px solid var(--line);
+      border-radius: 24px; box-shadow: 0 18px 40px rgba(52, 45, 32, 0.08);
+      padding: 24px 28px;
+    }
+    .overlap-header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 14px;
+    }
+    .overlap-card-title { font-size: 1rem; font-weight: 700; }
+    .overlap-sort-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.9rem; color: var(--muted);
+    }
+    .sort-select {
+      font: inherit; font-size: 0.9rem; border: 1px solid var(--line);
+      border-radius: 8px; padding: 6px 10px;
+      background: var(--panel); color: var(--ink); cursor: pointer;
+    }
+    .overlap-meta { color: var(--muted); font-size: 0.88rem; margin-bottom: 16px; }
+    .overlap-chart-wrap { position: relative; height: 480px; }
+    .overlap-empty {
+      display: flex; align-items: center; justify-content: center;
+      height: 480px; color: var(--muted); font-size: 0.95rem;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
   <main class="wrap">
@@ -207,6 +239,144 @@
       </article>
       {% endfor %}
     </section>
+
+    <section class="overlap-section">
+      <div class="overlap-title">跨 ETF 共同持股分析</div>
+      <div class="overlap-card">
+        <div class="overlap-header">
+          <span class="overlap-card-title">前 20 大共同持股</span>
+          <div class="overlap-sort-row">
+            <label for="sortEtf">排序依據</label>
+            <select id="sortEtf" class="sort-select"></select>
+          </div>
+        </div>
+        <div class="overlap-meta">
+          僅顯示同時出現於 2 支以上 ETF 的標的（最多 20 筆），以各 ETF 最新持股快照為準。
+          依選定 ETF 的持股權重由高到低排列；未持有的標的排於最下方。
+        </div>
+        <div class="overlap-chart-wrap">
+          <canvas id="overlapChart"></canvas>
+          <div id="overlapEmpty" class="overlap-empty" style="display:none;">暫無共同持股資料</div>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <script>
+  (function () {
+    const PALETTE = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed'];
+    let chartInstance = null;
+    let rawData = null;
+
+    function sortHoldings(holdings, anchorTicker) {
+      return [...holdings].sort((a, b) => {
+        const wa = a.weights[anchorTicker] ?? null;
+        const wb = b.weights[anchorTicker] ?? null;
+        if (wa === null && wb !== null) return 1;
+        if (wa !== null && wb === null) return -1;
+        if (wa !== null && wb !== null) return wb - wa;
+        return a.instrument_key.localeCompare(b.instrument_key);
+      });
+    }
+
+    function renderChart(data, anchorTicker) {
+      if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+      }
+
+      const sorted = sortHoldings(data.common_holdings, anchorTicker);
+      const display = sorted.reverse(); // reverse so highest is at top in horizontal bar chart
+
+      const tickers = data.tickers || [];
+      const tickerNames = data.ticker_names || {};
+      const labels = display.map(h => h.instrument_name + ' (' + h.instrument_key + ')');
+
+      const datasets = tickers.map((ticker, i) => ({
+        label: (tickerNames[ticker] || ticker).slice(0, 8) + ' (' + ticker + ')',
+        data: display.map(h => h.weights[ticker] != null ? h.weights[ticker] : 0),
+        backgroundColor: PALETTE[i % PALETTE.length],
+        borderRadius: 3,
+      }));
+
+      const barHeight = 28;
+      const chartHeight = Math.max(480, display.length * tickers.length * barHeight + 80);
+      document.querySelector('.overlap-chart-wrap').style.height = chartHeight + 'px';
+
+      chartInstance = new Chart(document.getElementById('overlapChart'), {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.parsed.x;
+                  return v > 0
+                    ? ctx.dataset.label + ': ' + v.toFixed(2) + '%'
+                    : ctx.dataset.label + ': 未持有';
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              title: { display: true, text: '持股權重 (%)', font: { size: 11 } },
+              ticks: { callback: v => v + '%', font: { size: 11 } },
+            },
+            y: { ticks: { font: { size: 11 } } },
+          },
+        },
+      });
+    }
+
+    async function loadOverlapChart() {
+      let data;
+      try {
+        const res = await fetch('/etfs/common-holdings?top_n=20');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        data = await res.json();
+      } catch (e) {
+        document.getElementById('overlapEmpty').style.display = 'flex';
+        document.getElementById('overlapChart').style.display = 'none';
+        return;
+      }
+
+      if (!data.common_holdings || !data.common_holdings.length) {
+        document.getElementById('overlapEmpty').style.display = 'flex';
+        document.getElementById('overlapChart').style.display = 'none';
+        return;
+      }
+
+      rawData = data;
+
+      // Populate ETF selector
+      const select = document.getElementById('sortEtf');
+      (data.tickers || []).forEach(ticker => {
+        const opt = document.createElement('option');
+        opt.value = ticker;
+        const name = (data.ticker_names[ticker] || ticker).slice(0, 8);
+        opt.textContent = name + ' (' + ticker + ')';
+        select.appendChild(opt);
+      });
+
+      // Initial render with first ETF
+      renderChart(data, data.tickers[0]);
+
+      // Re-render on selection change
+      select.addEventListener('change', () => {
+        renderChart(rawData, select.value);
+      });
+    }
+
+    loadOverlapChart();
+  })();
+  </script>
+
 </body>
 </html>
