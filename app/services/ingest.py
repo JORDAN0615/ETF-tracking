@@ -16,6 +16,7 @@ from app.repositories import (
     list_etfs,
 )
 from app.services.diff import build_diffs
+from app.services.notifications import create_telegram_notifier
 
 
 def _rows_to_holdings(rows: list[dict]) -> list[Holding]:
@@ -82,6 +83,30 @@ def _validate_snapshot(
         )
 
 
+def _send_notifications(
+    ticker: str,
+    etf_name: str,
+    trade_date: str,
+    diffs: list[dict],
+) -> None:
+    """Send Telegram notifications for major holding changes."""
+    notifier = create_telegram_notifier()
+    if not notifier.enabled:
+        return
+    
+    for diff in diffs:
+        notifier.notify_major_change(
+            ticker=ticker,
+            etf_name=etf_name,
+            trade_date=trade_date,
+            instrument_key=diff.get("instrument_key", ""),
+            instrument_name=diff.get("instrument_name", ""),
+            change_type=diff.get("change_type", ""),
+            prev_weight=diff.get("prev_weight"),
+            curr_weight=diff.get("curr_weight"),
+        )
+
+
 def ingest_latest_snapshot(
     ticker: str,
     trigger_type: str = "manual",
@@ -94,6 +119,7 @@ def ingest_latest_snapshot(
 
     started_at = _now_iso()
     trade_date: Optional[str] = None
+    etf_name = etf.get("name", ticker)
     try:
         source_config = dict(etf["source_config"])
         if target_date:
@@ -118,6 +144,10 @@ def ingest_latest_snapshot(
             started_at=started_at,
             finished_at=fetched_at,
         )
+        
+        # Send notifications for major changes
+        if diffs:
+            _send_notifications(ticker, etf_name, trade_date, diffs)
     except Exception as exc:
         failed_at = _now_iso()
         record_crawl_run(
