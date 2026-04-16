@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>台灣主動式 ETF 追蹤</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #f4f1ea;
@@ -15,11 +18,15 @@
       --increase: #215a8a;
       --decrease: #9b5d14;
       --exit: #93323c;
+      --transition-fast: 0.15s ease;
+      --transition-base: 0.2s ease;
+      --radius-btn: 10px;
+      --radius-card: 20px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Noto Sans TC", sans-serif;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
       background: linear-gradient(145deg, #ebe4d7 0%, #f8f5ef 55%, #f1eee9 100%);
       color: var(--ink);
     }
@@ -37,7 +44,7 @@
       margin-bottom: 24px;
     }
     h1, h2 { margin: 0; }
-    h1 { font-size: 2rem; margin-bottom: 12px; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
     p { margin: 0; line-height: 1.7; }
     .hero-bar {
       display: flex;
@@ -49,19 +56,32 @@
     }
     .button {
       border: 0;
-      border-radius: 999px;
+      border-radius: var(--radius-btn);
       background: #1e4f91;
       color: #fff;
       padding: 10px 18px;
       font: inherit;
+      font-weight: 500;
       cursor: pointer;
+      transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
     }
+    .button:hover {
+      background: #1a4480;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(30, 79, 145, 0.25);
+    }
+    .button:active { transform: translateY(0); box-shadow: none; }
     .button.secondary {
       background: #fff;
       color: var(--ink);
       border: 1px solid var(--line);
       text-decoration: none;
       display: inline-block;
+    }
+    .button.secondary:hover {
+      background: var(--bg);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(52, 45, 32, 0.1);
     }
     .etf-list {
       display: grid;
@@ -74,6 +94,11 @@
       border-radius: 24px;
       padding: 24px;
       box-shadow: 0 18px 40px rgba(52, 45, 32, 0.08);
+      transition: transform var(--transition-base), box-shadow var(--transition-base);
+    }
+    .etf-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 24px 52px rgba(52, 45, 32, 0.14);
     }
     .meta {
       margin-top: 16px;
@@ -110,6 +135,11 @@
       border: 1px solid var(--line);
       border-radius: 20px;
       padding: 20px;
+      transition: transform var(--transition-base), box-shadow var(--transition-base);
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(52, 45, 32, 0.1);
     }
     .card h2 {
       font-size: 1.1rem;
@@ -149,12 +179,29 @@
       font: inherit; font-size: 0.9rem; border: 1px solid var(--line);
       border-radius: 8px; padding: 6px 10px;
       background: var(--panel); color: var(--ink); cursor: pointer;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+      outline: none;
+    }
+    .sort-select:focus {
+      border-color: var(--increase);
+      box-shadow: 0 0 0 3px rgba(33, 90, 138, 0.12);
     }
     .overlap-meta { color: var(--muted); font-size: 0.88rem; margin-bottom: 16px; }
     .overlap-chart-wrap { position: relative; height: 480px; }
     .overlap-empty {
       display: flex; align-items: center; justify-content: center;
       height: 480px; color: var(--muted); font-size: 0.95rem;
+    }
+    @media (max-width: 900px) {
+      .etf-list { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      .wrap { padding: 24px 14px 40px; }
+      .hero { padding: 20px; border-radius: 18px; }
+      h1 { font-size: 1.5rem; }
+      .grid { grid-template-columns: 1fr; }
+      .overlap-chart-wrap { height: 320px; }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
@@ -286,7 +333,7 @@
       }
 
       const sorted = sortHoldings(data.common_holdings, anchorTicker);
-      const display = sorted.reverse(); // reverse so highest is at top in horizontal bar chart
+      const display = sorted; // highest weight first → renders at top in horizontal bar chart
 
       const tickers = data.tickers || [];
       const tickerNames = data.ticker_names || {};
