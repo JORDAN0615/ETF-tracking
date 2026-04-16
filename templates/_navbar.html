@@ -1,0 +1,56 @@
+<nav class="top-nav">
+  <a href="/" class="nav-tab {% if request.url.path != '/portfolio' %}active{% endif %}">
+    台灣主動式 ETF 追蹤系統
+  </a>
+  <a href="/portfolio" class="nav-tab {% if request.url.path == '/portfolio' %}active{% endif %}">
+    個人持股
+  </a>
+</nav>
+
+<style>
+.top-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 1000;
+  gap: 24px;
+}
+
+.nav-tab {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease;
+  position: relative;
+}
+
+.nav-tab:hover {
+  color: var(--ink);
+}
+
+.nav-tab.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--ink);
+}
+</style>

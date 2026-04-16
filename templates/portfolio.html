@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>個人持股</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --panel: #fffdf8;
+      --ink: #1e2b2f;
+      --muted: #64727a;
+      --line: #d7d0c3;
+      --enter: #17633a;
+      --increase: #215a8a;
+      --decrease: #9b5d14;
+      --exit: #93323c;
+      --transition-fast: 0.15s ease;
+      --transition-base: 0.2s ease;
+      --radius-btn: 10px;
+      --radius-card: 20px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: linear-gradient(145deg, #ebe4d7 0%, #f8f5ef 55%, #f1eee9 100%);
+      min-height: 100vh;
+      color: var(--ink);
+      padding-top: 52px;
+    }
+
+    /* ── Navbar ── */
+    .top-nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 52px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 1000;
+      gap: 28px;
+    }
+    .nav-tab {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      position: relative;
+      transition: color var(--transition-fast);
+      cursor: pointer;
+    }
+    .nav-tab:hover { color: var(--ink); }
+    .nav-tab.active { color: var(--ink); font-weight: 600; }
+    .nav-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--ink);
+      border-radius: 2px 2px 0 0;
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 32px;
+    }
+    .hero h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 6px;
+    }
+    .hero .update-date {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    /* ── Summary Bar ── */
+    .summary-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .summary-item {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      min-width: 160px;
+      box-shadow: 0 4px 12px rgba(52, 45, 32, 0.05);
+      transition: transform var(--transition-base), box-shadow var(--transition-base);
+    }
+    .summary-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(52, 45, 32, 0.10);
+    }
+    .summary-item .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .summary-item .value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    /* ── Grid ── */
+    .portfolio-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      box-shadow: 0 8px 24px rgba(52, 45, 32, 0.07);
+      transition: transform var(--transition-base), box-shadow var(--transition-base);
+      overflow: hidden;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 40px rgba(52, 45, 32, 0.12);
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    /* ── Table ── */
+    .holdings-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .holdings-table th {
+      background: #faf8f5;
+      padding: 11px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    .holdings-table td {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--ink);
+      border-bottom: 1px solid var(--line);
+    }
+    .holdings-table tbody tr:last-child td { border-bottom: none; }
+    .holdings-table tbody tr:hover { background: rgba(30, 43, 47, 0.03); }
+    .holdings-table .ticker { font-weight: 600; font-size: 13px; }
+    .holdings-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .holdings-table .pct { text-align: right; color: var(--muted); font-size: 13px; }
+
+    /* ── Chart ── */
+    .chart-body {
+      padding: 20px;
+    }
+    .chart-container {
+      position: relative;
+      height: 280px;
+    }
+
+    /* ── Sync Button ── */
+    .sync-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 18px;
+      background: var(--ink);
+      color: #fffdf8;
+      border: none;
+      border-radius: var(--radius-btn);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity var(--transition-fast), transform var(--transition-fast);
+    }
+    .sync-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .sync-btn:active { transform: translateY(0); }
+    .sync-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .sync-btn svg { transition: transform 0.6s linear; }
+    .sync-btn.loading svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .portfolio-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .container { padding: 24px 16px 40px; }
+      .hero h1 { font-size: 22px; }
+      .summary-item .value { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="top-nav">
+    <a href="/" class="nav-tab">台灣主動式 ETF 追蹤系統</a>
+    <a href="/portfolio" class="nav-tab active">個人持股</a>
+  </nav>
+
+  <div class="container">
+
+    <!-- Hero -->
+    <div class="hero" style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <div>
+        <h1>個人持股</h1>
+        <p class="update-date">最後更新：{{ data.trade_date }}</p>
+      </div>
+      <button class="sync-btn" id="syncBtn" onclick="syncHoldings()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+          <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
+        從 Gmail 更新
+      </button>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-bar">
+      <div class="summary-item">
+        <span class="label">總市值</span>
+        <span class="value">NT$ {{ "{:,.0f}".format(data.total_value) }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">持股檔數</span>
+        <span class="value">{{ data.holdings | length }} 檔</span>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div class="portfolio-grid">
+
+      <!-- Table -->
+      <div class="card">
+        <div class="card-title">持倉明細</div>
+        <table class="holdings-table">
+          <thead>
+            <tr>
+              <th>代碼</th>
+              <th>股票名稱</th>
+              <th class="num">持股數</th>
+              <th class="num">收盤價</th>
+              <th class="num">市值</th>
+              <th class="pct">佔比</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in data.holdings %}
+            <tr>
+              <td class="ticker">{{ item.ticker }}</td>
+              <td>{{ item.name }}</td>
+              <td class="num">{{ "{:,}".format(item.shares) }}</td>
+              <td class="num">{{ "{:,.2f}".format(item.close_price) }}</td>
+              <td class="num">{{ "{:,.0f}".format(item.market_value) }}</td>
+              <td class="pct">{{ "%.1f"|format(item.market_value / data.total_value * 100) }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Chart -->
+      <div class="card">
+        <div class="card-title">市值比例</div>
+        <div class="chart-body">
+          <div class="chart-container">
+            <canvas id="holdingsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    async function syncHoldings() {
+      const btn = document.getElementById('syncBtn');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.querySelector('span') && (btn.querySelector('span').textContent = '更新中...');
+      btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('從 Gmail 更新', '更新中...'); });
+
+      try {
+        const res = await fetch('/portfolio/sync', { method: 'POST' });
+        if (res.ok) {
+          location.reload();
+        } else {
+          const err = await res.json();
+          alert('更新失敗：' + (err.detail || '未知錯誤'));
+          btn.disabled = false;
+          btn.classList.remove('loading');
+        }
+      } catch (e) {
+        alert('連線錯誤：' + e.message);
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    }
+
+    const labels = [{% for item in data.holdings %}"{{ item.name }}",{% endfor %}];
+    const values = [{% for item in data.holdings %}{{ item.market_value }},{% endfor %}];
+    const colors = ['#17633a', '#215a8a', '#9b5d14', '#93323c', '#64727a', '#4a6fa5', '#8b7355'];
+
+    new Chart(document.getElementById('holdingsChart'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#fffdf8'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              boxWidth: 12,
+              padding: 14,
+              font: { family: "'Inter', 'Noto Sans TC'", size: 12 }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const pct = (ctx.parsed / values.reduce((a,b)=>a+b,0) * 100).toFixed(1);
+                return ` ${ctx.label}: NT$${ctx.parsed.toLocaleString()} (${pct}%)`;
+              }
+            }
+          }
+        },
+        cutout: '65%'
+      }
+    });
+  </script>
+
+</body>
+</html>

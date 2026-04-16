@@ -26,6 +26,8 @@ from app.repositories import (
 )
 from app.services.ingest import ingest_latest_snapshot, refresh_active_etfs
 from app.services.maintenance import lock_00992a_baseline
+from app.services.portfolio import get_latest_holdings
+from app.services.cathay_sync import run as run_cathay_sync
 from app.services.export import (
     export_diffs_csv,
     export_diffs_json,
@@ -276,8 +278,42 @@ def index(request: Request) -> HTMLResponse:
         "index.html",
         {
             "cards": cards,
+            "active": "etf",
         },
     )
+
+
+@app.get("/portfolio", response_class=HTMLResponse)
+def portfolio_page(request: Request) -> HTMLResponse:
+    data = get_latest_holdings()
+    if not data:
+        raise HTTPException(status_code=404, detail="No portfolio data found")
+    
+    return templates.TemplateResponse(
+        request,
+        "portfolio.html",
+        {
+            "data": data,
+            "active": "portfolio",
+        },
+    )
+
+
+@app.get("/portfolio/holdings")
+def portfolio_holdings() -> dict:
+    data = get_latest_holdings()
+    if not data:
+        raise HTTPException(status_code=404, detail="No portfolio data found")
+    return data
+
+
+@app.post("/portfolio/sync")
+def portfolio_sync():
+    try:
+        run_cathay_sync()
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/etfs/{ticker}", response_class=HTMLResponse)
@@ -294,6 +330,7 @@ def etf_detail(request: Request, ticker: str) -> HTMLResponse:
         {
             "card": card,
             "diffs": card["display_diffs"],
+            "active": "etf",
         },
     )
 
