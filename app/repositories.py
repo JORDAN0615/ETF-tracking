@@ -49,6 +49,7 @@ DEFAULT_ETFS = [
 
 
 def _normalize_value(value):
+    # Decimal → float、datetime → ISO 字串，避免 JSON 序列化出錯
     if isinstance(value, Decimal):
         return float(value)
     if isinstance(value, datetime):
@@ -59,10 +60,12 @@ def _normalize_value(value):
 
 
 def _row_to_dict(row) -> dict:
+    # DB row 物件轉成普通 dict，每個值都過一次 _normalize_value
     return {key: _normalize_value(value) for key, value in dict(row).items()}
 
 
 def _deserialize_etf(row) -> dict:
+    # ETF row 專用：額外把 source_config JSON 字串解析成 dict、is_active 轉 bool
     etf = _row_to_dict(row)
     source_config = etf.get("source_config")
     if isinstance(source_config, str):
@@ -73,7 +76,10 @@ def _deserialize_etf(row) -> dict:
     return etf
 
 
+# ── 寫入 ──────────────────────────────────────────────────────────────────────
+
 def seed_default_data() -> None:
+    # server 啟動時執行，把 5 支 ETF 基本資料寫進 etfs 表，已存在就跳過
     seed_rows_pg = [
         (
             etf.ticker,
@@ -121,6 +127,7 @@ def seed_default_data() -> None:
 
 
 def remove_etf(ticker: str) -> None:
+    # 刪除某 ETF 的所有相關資料（四張表），server 啟動時用來移除已下架的 ETF
     with get_connection() as connection:
         connection.execute("DELETE FROM crawl_runs WHERE etf_ticker = ?", (ticker,))
         connection.execute("DELETE FROM holding_diffs WHERE etf_ticker = ?", (ticker,))
@@ -128,7 +135,10 @@ def remove_etf(ticker: str) -> None:
         connection.execute("DELETE FROM etfs WHERE ticker = ?", (ticker,))
 
 
+# ── 讀取 ──────────────────────────────────────────────────────────────────────
+
 def list_etfs() -> list[dict]:
+    # 列出所有 ETF，並附上最新快照日期和最後爬蟲狀態，首頁卡片的資料來源
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -158,6 +168,7 @@ def list_etfs() -> list[dict]:
 
 
 def get_etf(ticker: str) -> Optional[dict]:
+    # 取單一 ETF 基本資料
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -171,6 +182,7 @@ def get_etf(ticker: str) -> Optional[dict]:
 
 
 def save_snapshot(
+    # 儲存某 ETF 某天的持股快照。先刪同一天舊資料，再批次寫入（maintenance.py 維護用）
     ticker: str,
     trade_date: str,
     holdings: Iterable[Holding],
@@ -207,6 +219,7 @@ def save_snapshot(
 
 
 def get_snapshot(ticker: str, trade_date: str) -> list[dict]:
+    # 取某 ETF 某天的完整持股清單，按比重高→低排序
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -222,6 +235,7 @@ def get_snapshot(ticker: str, trade_date: str) -> list[dict]:
 
 
 def get_previous_trade_date(ticker: str, trade_date: str) -> Optional[str]:
+    # 找某日期之前最近一次有資料的交易日，計算 diff 時用來定位「上一天」
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -237,6 +251,7 @@ def get_previous_trade_date(ticker: str, trade_date: str) -> Optional[str]:
 
 
 def save_diffs(ticker: str, trade_date: str, diffs: Iterable[HoldingDiff]) -> None:
+    # 單獨儲存持股變動（maintenance.py 維護用，正常流程走 replace_snapshot_and_diffs）
     with get_connection() as connection:
         connection.execute(
             "DELETE FROM holding_diffs WHERE etf_ticker = ? AND trade_date = ?",
@@ -271,6 +286,8 @@ def save_diffs(ticker: str, trade_date: str, diffs: Iterable[HoldingDiff]) -> No
 
 
 def replace_snapshot_and_diffs(
+    # 爬蟲完成後的主要寫入入口：在同一個 transaction 裡寫 holdings_snapshots + holding_diffs + crawl_runs
+    # 三張表同時成功或同時 rollback，確保資料一致性
     ticker: str,
     trade_date: str,
     holdings: Iterable[Holding],
@@ -352,6 +369,7 @@ def replace_snapshot_and_diffs(
 
 
 def record_crawl_run(
+    # 單獨記錄一筆爬蟲執行記錄，通常用於失敗時（成功已包在 replace_snapshot_and_diffs 裡）
     ticker: str,
     trigger_type: str,
     started_at: str,
@@ -381,6 +399,7 @@ def record_crawl_run(
 
 
 def _serialize_diff_row(row) -> dict:
+    # diff row 轉 dict，補算 quantity_delta_pct（變動%）和 *_lots（張數換算）
     payload = _row_to_dict(row)
     prev_quantity = payload["prev_quantity"]
     curr_quantity = payload["curr_quantity"]
@@ -401,6 +420,7 @@ def _serialize_diff_row(row) -> dict:
 
 
 def get_diffs(ticker: str, trade_date: str) -> list[dict]:
+    # 取某 ETF 某天的持股變動，按 enter→increase→decrease→exit 順序排，同類型按變動幅度排
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -426,6 +446,7 @@ def get_diffs(ticker: str, trade_date: str) -> list[dict]:
 
 
 def get_latest_snapshot_date(ticker: str) -> Optional[str]:
+    # 最新快照是哪一天
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -441,6 +462,7 @@ def get_latest_snapshot_date(ticker: str) -> Optional[str]:
 
 
 def get_latest_snapshot_metadata(ticker: str) -> Optional[dict]:
+    # 最新快照的日期 + 抓取時間（用於首頁顯示「最後更新」）
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -456,6 +478,7 @@ def get_latest_snapshot_metadata(ticker: str) -> Optional[dict]:
 
 
 def get_snapshot_metadata(ticker: str, trade_date: str) -> Optional[dict]:
+    # 指定日期的快照 metadata（日期 + 抓取時間）
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -470,6 +493,7 @@ def get_snapshot_metadata(ticker: str, trade_date: str) -> Optional[dict]:
 
 
 def get_latest_snapshot_count(ticker: str) -> Optional[int]:
+    # 最新快照共有幾筆持股（用於判斷資料是否完整）
     with get_connection() as connection:
         row = connection.execute(
             """
@@ -490,6 +514,7 @@ def get_latest_snapshot_count(ticker: str) -> Optional[int]:
 
 
 def get_latest_crawl_run(ticker: str) -> Optional[dict]:
+    # 最近一次爬蟲記錄（狀態、時間、錯誤訊息），首頁卡片顯示爬蟲狀態用
     with get_connection() as connection:
         row = connection.execute(
             """

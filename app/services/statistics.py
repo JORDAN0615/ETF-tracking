@@ -308,7 +308,7 @@ def get_weight_chart_data(ticker: str, limit: int = 30) -> dict:
     from collections import defaultdict
     from app.repositories import get_connection
 
-    # Step 1: Get the last `limit` distinct trade dates
+    # Step 1: Get the last `limit` distinct trade dates 拿最近 30 個交易日（trade_date） 
     with get_connection() as conn:
         date_rows = conn.execute(
             "SELECT DISTINCT trade_date FROM holdings_snapshots "
@@ -323,7 +323,7 @@ def get_weight_chart_data(ticker: str, limit: int = 30) -> dict:
             "concentration_series": {"top3": [], "top5": [], "top10": []},
         }
 
-    # Sort dates ascending for chart display
+    # Sort dates ascending for chart display 排成升序
     dates = sorted(row["trade_date"] for row in date_rows)
 
     # Step 2: Fetch all holdings for those dates in one query
