@@ -181,15 +181,15 @@ def _insert_transactions(trade_date: str, transactions: list[dict], source_file:
     now = datetime.now(timezone.utc).isoformat()
     rows = [
         (trade_date, t["ticker"], t.get("name"), t["action"],
-         t["shares"], t.get("price"), source_file, now)
+         t["shares"], t.get("price"), source_file, now, "cathay")
         for t in transactions
     ]
     with get_connection() as conn:
         conn.executemany(
             """
             INSERT INTO us_stock_transactions
-                (trade_date, ticker, name, action, shares, price, source_file, imported_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (trade_date, ticker, name, action, shares, price, source_file, imported_at, broker)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )

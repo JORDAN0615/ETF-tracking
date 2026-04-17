@@ -10,14 +10,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _get_us_positions() -> list[dict]:
-    """從 us_stock_transactions 計算目前各 ticker 的持股數。"""
+    """從 us_stock_transactions 計算目前各 ticker 的持股數（跨券商合計）。"""
     with get_connection() as conn:
         rows = conn.execute(
             """
             SELECT
                 ticker,
                 MAX(name) AS name,
-                SUM(CASE WHEN action = 'sell' THEN -shares ELSE shares END) AS total_shares
+                SUM(CASE WHEN action = 'sell' THEN -shares ELSE shares END) AS total_shares,
+                GROUP_CONCAT(DISTINCT broker) AS brokers
             FROM us_stock_transactions
             GROUP BY ticker
             HAVING total_shares > 0.0001
@@ -101,6 +102,7 @@ def get_us_holdings() -> dict | None:
             "price_usd": price,
             "market_value_usd": market_value_usd,
             "market_value_twd": market_value_twd,
+            "brokers": pos.get("brokers", ""),
         })
 
     total_twd = total_usd * usd_twd if (total_usd and usd_twd) else None
@@ -127,8 +129,8 @@ def import_baseline(positions: list[dict], trade_date: str) -> int:
         conn.execute("DELETE FROM us_stock_transactions WHERE action = 'initial'")
         conn.executemany(
             """
-            INSERT INTO us_stock_transactions (trade_date, ticker, name, action, shares, price, source_file, imported_at)
-            VALUES (?, ?, ?, 'initial', ?, NULL, 'manual_baseline', ?)
+            INSERT INTO us_stock_transactions (trade_date, ticker, name, action, shares, price, source_file, imported_at, broker)
+            VALUES (?, ?, ?, 'initial', ?, NULL, 'manual_baseline', ?, 'cathay')
             """,
             [(trade_date, p["ticker"], p.get("name", p["ticker"]), float(p["shares"]), now)
              for p in positions],

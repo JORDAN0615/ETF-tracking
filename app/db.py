@@ -166,6 +166,14 @@ def _init_sqlite() -> None:
             connection.execute(
                 "ALTER TABLE holdings_snapshots ADD COLUMN fetched_at TEXT"
             )
+        us_cols = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(us_stock_transactions)").fetchall()
+        }
+        if "broker" not in us_cols:
+            connection.execute(
+                "ALTER TABLE us_stock_transactions ADD COLUMN broker TEXT NOT NULL DEFAULT 'cathay'"
+            )
 
 
 def _init_postgres() -> None:

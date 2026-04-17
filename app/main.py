@@ -30,6 +30,7 @@ from app.services.portfolio import get_latest_holdings
 from app.services.cathay_sync import run as run_cathay_sync
 from app.services.us_portfolio import get_us_holdings, import_baseline
 from app.services.us_stock_sync import run as run_us_stock_sync
+from app.services.firstrade_sync import run as run_firstrade_sync
 from app.services.export import (
     export_diffs_csv,
     export_diffs_json,
@@ -351,6 +352,28 @@ def us_portfolio_sync() -> dict:
         return run_us_stock_sync()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/us-portfolio/firstrade-sync")
+def us_portfolio_firstrade_sync() -> dict:
+    """從 Firstrade API 同步最新持倉。"""
+    try:
+        return run_firstrade_sync()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/us-portfolio/sync-all")
+def us_portfolio_sync_all() -> dict:
+    """同時觸發國泰 + Firstrade 同步。"""
+    cathay_result = run_us_stock_sync()
+    firstrade_result = run_firstrade_sync()
+    return {
+        "status": "ok",
+        "cathay": cathay_result,
+        "firstrade": firstrade_result,
+        "synced_at": datetime.now().isoformat(),
+    }
 
 
 @app.get("/etfs/{ticker}", response_class=HTMLResponse)

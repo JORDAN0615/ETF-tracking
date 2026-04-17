@@ -228,7 +228,7 @@
 
   <!-- Navbar -->
   <nav class="top-nav">
-    <a href="/" class="nav-tab">台灣主動式 ETF 追蹤系統</a>
+    <a href="/" class="nav-tab">台灣主動式 ETF 追蹤</a>
     <a href="/portfolio" class="nav-tab active">個人持股</a>
   </nav>
 
@@ -238,26 +238,34 @@
     <div class="hero" style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
       <div>
         <h1>個人持股</h1>
-        <p class="update-date">最後更新：{{ data.trade_date }}</p>
       </div>
-      <button class="sync-btn" id="syncBtn" onclick="syncHoldings()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
-          <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-        </svg>
-        從 Gmail 更新
-      </button>
+      <div style="text-align:right;">
+        <div style="font-size:12px; color:var(--muted); font-weight:500; margin-bottom:6px;">總持倉</div>
+        <div id="heroTotal" style="font-size:32px; font-weight:700; color:var(--ink); letter-spacing:-0.5px;">NT$ {{ "{:,.0f}".format(data.total_value) }}</div>
+      </div>
     </div>
 
-    <!-- Summary -->
-    <div class="summary-bar">
-      <div class="summary-item">
-        <span class="label">總市值</span>
-        <span class="value">NT$ {{ "{:,.0f}".format(data.total_value) }}</span>
+    <!-- 台股持倉 -->
+    <div style="margin-top: 8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+        <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin:0;">台股持倉</h2>
+        <button class="sync-btn" id="syncBtn" onclick="syncHoldings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+            <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+          </svg>
+          從 Gmail 更新
+        </button>
       </div>
-      <div class="summary-item">
-        <span class="label">持股檔數</span>
-        <span class="value">{{ data.holdings | length }} 檔</span>
+      <div class="summary-bar">
+        <div class="summary-item">
+          <span class="label">總持倉</span>
+          <span class="value" id="summaryTotal">NT$ {{ "{:,.0f}".format(data.total_value) }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">持股檔數</span>
+          <span class="value">{{ data.holdings | length }} 檔</span>
+        </div>
       </div>
     </div>
 
@@ -308,13 +316,13 @@
     <!-- ── 美股持倉 ────────────────────────────────────────────────── -->
     <div style="margin-top: 40px;">
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
-        <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin:0;">美股持倉（附委托）</h2>
-        <button class="sync-btn" id="usSyncBtn" onclick="syncUsHoldings()">
+        <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin:0;">美股持倉</h2>
+        <button class="sync-btn" id="usSyncBtn" onclick="syncAllUs()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
             <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
           </svg>
-          同步報告書
+          同步美股持倉
         </button>
       </div>
 
@@ -328,18 +336,19 @@
 
           <!-- grid -->
           <div class="portfolio-grid">
-            <div class="card">
+            <div class="card" style="overflow-x: auto;">
               <div class="card-title">持倉明細（USD）</div>
-              <table class="holdings-table" id="usTable">
+              <table class="holdings-table" id="usTable" style="min-width: 700px;">
                 <thead>
                   <tr>
-                    <th>代碼</th>
-                    <th>名稱</th>
-                    <th class="num">股數</th>
-                    <th class="num">即時價</th>
-                    <th class="num">市值 (USD)</th>
-                    <th class="num">市值 (TWD)</th>
-                    <th class="pct">佔比</th>
+                    <th style="width:70px;">代碼</th>
+                    <th style="width:160px;">名稱</th>
+                    <th style="width:70px;">券商</th>
+                    <th class="num" style="width:80px;">股數</th>
+                    <th class="num" style="width:80px;">即時價</th>
+                    <th class="num" style="width:100px;">市值 (USD)</th>
+                    <th class="num" style="width:100px;">市值 (TWD)</th>
+                    <th class="pct" style="width:60px;">佔比</th>
                   </tr>
                 </thead>
                 <tbody id="usTableBody"></tbody>
@@ -450,6 +459,15 @@
         const totalTwd = data.total_value_twd;
         const rate = data.usd_twd_rate;
 
+        // 更新總持倉（台股 + 美股）
+        const twStockTotal = {{ data.total_value }};
+        if (totalTwd) {
+          const combined = twStockTotal + totalTwd;
+          const combinedStr = `NT$ ${Math.round(combined).toLocaleString()}`;
+          document.getElementById('heroTotal').textContent = combinedStr;
+          document.getElementById('summaryTotal').textContent = combinedStr;
+        }
+
         // summary
         const sb = document.getElementById('usSummaryBar');
         const twdStr = totalTwd ? `NT$ ${Math.round(totalTwd).toLocaleString()}` : '-';
@@ -477,9 +495,13 @@
           const price = h.price_usd != null ? `$${h.price_usd.toFixed(2)}` : '-';
           const mvUsdStr = mv != null ? `$${mv.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '-';
           const mvTwdStr = mvTwd != null ? `NT$${Math.round(mvTwd).toLocaleString()}` : '-';
+          const brokerLabel = h.brokers === 'firstrade'
+            ? '<span style="font-size:10px;background:#ede9fe;color:#6d28d9;border-radius:4px;padding:1px 5px;white-space:nowrap;">FT</span>'
+            : '<span style="font-size:10px;background:#dcfce7;color:#15803d;border-radius:4px;padding:1px 5px;white-space:nowrap;">國泰</span>';
           tbody.innerHTML += `<tr>
             <td class="ticker">${h.ticker}</td>
             <td>${h.name}</td>
+            <td>${brokerLabel}</td>
             <td class="num">${h.shares % 1 === 0 ? h.shares.toFixed(0) : h.shares.toFixed(4)}</td>
             <td class="num">${price}</td>
             <td class="num">${mvUsdStr}</td>
@@ -530,16 +552,18 @@
       }
     }
 
-    async function syncUsHoldings() {
+    async function syncAllUs() {
       const btn = document.getElementById('usSyncBtn');
       btn.disabled = true;
       btn.classList.add('loading');
-      btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步報告書', '同步中...'); });
+      btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步美股持倉', '同步中...'); });
       try {
-        const res = await fetch('/us-portfolio/sync', { method: 'POST' });
+        const res = await fetch('/us-portfolio/sync-all', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-          alert(data.message || '同步完成');
+          const ct = data.cathay?.message || '';
+          const ft = data.firstrade?.message || '';
+          alert(`國泰：${ct}\nFirstrade：${ft}`);
           location.reload();
         } else {
           alert('同步失敗：' + (data.detail || '未知錯誤'));
@@ -549,7 +573,7 @@
       } finally {
         btn.disabled = false;
         btn.classList.remove('loading');
-        btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步中...', '同步報告書'); });
+        btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步中...', '同步美股持倉'); });
       }
     }
 
