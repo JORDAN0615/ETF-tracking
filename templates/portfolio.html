@@ -304,7 +304,62 @@
       </div>
 
     </div>
-  </div>
+
+    <!-- ── 美股持倉 ────────────────────────────────────────────────── -->
+    <div style="margin-top: 40px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+        <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin:0;">美股持倉（附委托）</h2>
+        <button class="sync-btn" id="usSyncBtn" onclick="syncUsHoldings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+            <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+          </svg>
+          同步報告書
+        </button>
+      </div>
+
+      <div id="usPortfolioArea">
+        <div id="usLoadingMsg" style="color:var(--muted); font-size:14px; padding:8px 0;">載入中...</div>
+        <div id="usEmptyMsg" style="display:none; color:var(--muted); font-size:14px; padding:8px 0;">尚無美股持倉資料。請先匯入初始持股。</div>
+
+        <div id="usContent" style="display:none;">
+          <!-- summary -->
+          <div class="summary-bar" id="usSummaryBar" style="margin-bottom:24px;"></div>
+
+          <!-- grid -->
+          <div class="portfolio-grid">
+            <div class="card">
+              <div class="card-title">持倉明細（USD）</div>
+              <table class="holdings-table" id="usTable">
+                <thead>
+                  <tr>
+                    <th>代碼</th>
+                    <th>名稱</th>
+                    <th class="num">股數</th>
+                    <th class="num">即時價</th>
+                    <th class="num">市值 (USD)</th>
+                    <th class="num">市值 (TWD)</th>
+                    <th class="pct">佔比</th>
+                  </tr>
+                </thead>
+                <tbody id="usTableBody"></tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="card-title">市值比例</div>
+              <div class="chart-body">
+                <div class="chart-container">
+                  <canvas id="usChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="usPriceNote" style="margin-top:10px; font-size:12px; color:var(--muted);"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /container -->
 
   <script>
     async function syncHoldings() {
@@ -370,6 +425,135 @@
         cutout: '65%'
       }
     });
+    // ── US Portfolio ─────────────────────────────────────────────────────────
+    const US_COLOR_PALETTE = ['#2563eb','#16a34a','#dc2626','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#0d9488','#9333ea','#ca8a04'];
+    function tickerColor(ticker) {
+      // ticker 名稱 hash → 固定對應顏色，新增 stock 不影響其他人
+      let h = 0;
+      for (let i = 0; i < ticker.length; i++) h = (h * 31 + ticker.charCodeAt(i)) >>> 0;
+      return US_COLOR_PALETTE[h % US_COLOR_PALETTE.length];
+    }
+
+    async function loadUsHoldings() {
+      try {
+        const res = await fetch('/us-portfolio/holdings');
+        document.getElementById('usLoadingMsg').style.display = 'none';
+        if (res.status === 404) {
+          document.getElementById('usEmptyMsg').style.display = 'block';
+          return;
+        }
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        const holdings = data.holdings || [];
+        const totalUsd = data.total_value_usd || 0;
+        const totalTwd = data.total_value_twd;
+        const rate = data.usd_twd_rate;
+
+        // summary
+        const sb = document.getElementById('usSummaryBar');
+        const twdStr = totalTwd ? `NT$ ${Math.round(totalTwd).toLocaleString()}` : '-';
+        const rateStr = rate ? `1 USD = ${rate.toFixed(2)} TWD` : '';
+        sb.innerHTML = `
+          <div class="summary-item">
+            <span class="label">總市值 (USD)</span>
+            <span class="value">$${totalUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">總市值 (TWD)</span>
+            <span class="value">${twdStr}</span>
+            ${rateStr ? `<span style="font-size:11px;color:var(--muted);margin-top:2px;">${rateStr}</span>` : ''}
+          </div>
+          <div class="summary-item"><span class="label">持股檔數</span><span class="value">${holdings.length} 檔</span></div>
+        `;
+
+        // table
+        const tbody = document.getElementById('usTableBody');
+        tbody.innerHTML = '';
+        holdings.forEach(h => {
+          const mv = h.market_value_usd;
+          const mvTwd = h.market_value_twd;
+          const pct = totalUsd > 0 && mv ? (mv / totalUsd * 100).toFixed(1) : '-';
+          const price = h.price_usd != null ? `$${h.price_usd.toFixed(2)}` : '-';
+          const mvUsdStr = mv != null ? `$${mv.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '-';
+          const mvTwdStr = mvTwd != null ? `NT$${Math.round(mvTwd).toLocaleString()}` : '-';
+          tbody.innerHTML += `<tr>
+            <td class="ticker">${h.ticker}</td>
+            <td>${h.name}</td>
+            <td class="num">${h.shares % 1 === 0 ? h.shares.toFixed(0) : h.shares.toFixed(4)}</td>
+            <td class="num">${price}</td>
+            <td class="num">${mvUsdStr}</td>
+            <td class="num" style="color:var(--muted);font-size:12px;">${mvTwdStr}</td>
+            <td class="pct">${pct !== '-' ? pct + '%' : '-'}</td>
+          </tr>`;
+        });
+
+        // price note
+        if (data.as_of) {
+          const d = new Date(data.as_of);
+          document.getElementById('usPriceNote').textContent =
+            `報價來源：Yahoo Finance（延遲 15 分鐘），截至 ${d.toLocaleString('zh-TW')}`;
+        }
+
+        // chart
+        const withValue = holdings.filter(h => h.market_value_usd != null);
+        if (withValue.length > 0) {
+          new Chart(document.getElementById('usChart'), {
+            type: 'doughnut',
+            data: {
+              labels: withValue.map(h => h.ticker),
+              datasets: [{
+                data: withValue.map(h => h.market_value_usd),
+                backgroundColor: withValue.map(h => tickerColor(h.ticker)),
+                borderWidth: 2,
+                borderColor: '#fffdf8'
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 14, font: { family: "'Inter','Noto Sans TC'", size: 12 } } },
+                tooltip: { callbacks: { label: (ctx) => {
+                  const pct = (ctx.parsed / withValue.reduce((a,b)=>a+b.market_value_usd,0) * 100).toFixed(1);
+                  return ` ${ctx.label}: $${ctx.parsed.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})} (${pct}%)`;
+                }}}
+              },
+              cutout: '65%'
+            }
+          });
+        }
+
+        document.getElementById('usContent').style.display = 'block';
+      } catch (e) {
+        document.getElementById('usLoadingMsg').textContent = '載入失敗：' + e.message;
+      }
+    }
+
+    async function syncUsHoldings() {
+      const btn = document.getElementById('usSyncBtn');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步報告書', '同步中...'); });
+      try {
+        const res = await fetch('/us-portfolio/sync', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message || '同步完成');
+          location.reload();
+        } else {
+          alert('同步失敗：' + (data.detail || '未知錯誤'));
+        }
+      } catch (e) {
+        alert('連線錯誤：' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = n.textContent.replace('同步中...', '同步報告書'); });
+      }
+    }
+
+    loadUsHoldings();
   </script>
 
 </body>

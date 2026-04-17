@@ -28,6 +28,8 @@ from app.services.ingest import ingest_latest_snapshot, refresh_active_etfs
 from app.services.maintenance import lock_00992a_baseline
 from app.services.portfolio import get_latest_holdings
 from app.services.cathay_sync import run as run_cathay_sync
+from app.services.us_portfolio import get_us_holdings, import_baseline
+from app.services.us_stock_sync import run as run_us_stock_sync
 from app.services.export import (
     export_diffs_csv,
     export_diffs_json,
@@ -316,6 +318,41 @@ def portfolio_sync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── US Stock Portfolio ────────────────────────────────────────────────────────
+
+@app.get("/us-portfolio/holdings")
+def us_portfolio_holdings() -> dict:
+    data = get_us_holdings()
+    if not data:
+        raise HTTPException(status_code=404, detail="No US stock positions found. Import baseline first.")
+    return data
+
+
+@app.post("/us-portfolio/baseline")
+def us_portfolio_baseline(positions: list[dict]) -> dict:
+    """
+    匯入美股初始持倉。
+    Body: [{ "ticker": "AAPL", "name": "Apple Inc.", "shares": 10.5 }, ...]
+    """
+    if not positions:
+        raise HTTPException(status_code=400, detail="positions list is empty")
+    today = datetime.now().date().isoformat()
+    try:
+        count = import_baseline(positions, today)
+        return {"status": "ok", "imported": count, "trade_date": today}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/us-portfolio/sync")
+def us_portfolio_sync() -> dict:
+    """從 Gmail 抓取最新客戶日買賣報告書並匯入交易紀錄。"""
+    try:
+        return run_us_stock_sync()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/etfs/{ticker}", response_class=HTMLResponse)
 def etf_detail(request: Request, ticker: str) -> HTMLResponse:
     etf = get_etf(ticker)
@@ -324,12 +361,14 @@ def etf_detail(request: Request, ticker: str) -> HTMLResponse:
 
     today = datetime.now().date().isoformat()
     card = _build_card(etf, today)
+    snapshot = get_snapshot(ticker, card["latest_date"]) if card.get("latest_date") else []
     return templates.TemplateResponse(
         request,
         "detail.html",
         {
             "card": card,
             "diffs": card["display_diffs"],
+            "snapshot": snapshot,
             "active": "etf",
         },
     )

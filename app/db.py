@@ -132,6 +132,30 @@ def _init_sqlite() -> None:
                 error_message TEXT,
                 FOREIGN KEY (etf_ticker) REFERENCES etfs (ticker)
             );
+
+            CREATE TABLE IF NOT EXISTS my_holdings (
+                trade_date  TEXT NOT NULL,
+                ticker      TEXT NOT NULL,
+                name        TEXT NOT NULL,
+                close_price REAL NOT NULL,
+                shares      INTEGER NOT NULL,
+                market_value REAL NOT NULL,
+                source_file TEXT,
+                imported_at TEXT NOT NULL,
+                PRIMARY KEY (trade_date, ticker)
+            );
+
+            CREATE TABLE IF NOT EXISTS us_stock_transactions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                trade_date  TEXT NOT NULL,
+                ticker      TEXT NOT NULL,
+                name        TEXT,
+                action      TEXT NOT NULL,
+                shares      REAL NOT NULL,
+                price       REAL,
+                source_file TEXT,
+                imported_at TEXT NOT NULL
+            );
             """
         )
         columns = {
