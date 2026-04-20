@@ -481,8 +481,7 @@
         const twStockTotal = {{ data.total_value }};
         if (totalTwd) {
           const combined = twStockTotal + totalTwd;
-          const combinedStr = `NT$ ${Math.round(combined).toLocaleString()}`;
-          // hero 維持顯示台股，總持倉數字不變；PNL 另外顯示在 heroPnl
+          document.getElementById('heroTotal').textContent = `NT$ ${Math.round(combined).toLocaleString()}`;
         }
         try {
           const pnlRes = await fetch('/portfolio/combined-pnl');
