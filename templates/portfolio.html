@@ -240,8 +240,9 @@
         <h1>個人持股</h1>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:12px; color:var(--muted); font-weight:500; margin-bottom:6px;">總持倉</div>
-        <div id="heroTotal" style="font-size:32px; font-weight:700; color:var(--ink); letter-spacing:-0.5px;">NT$ {{ "{:,.0f}".format(data.total_value) }}</div>
+        <div style="font-size:12px; color:var(--muted); font-weight:500; margin-bottom:4px;">總持倉</div>
+        <div id="heroTotal" style="font-size:32px; font-weight:700; color:var(--ink); letter-spacing:-0.5px; line-height:1.1;">NT$ {{ "{:,.0f}".format(data.total_value) }}</div>
+        <div id="heroPnl" style="font-size:16px; font-weight:600; color:#dc2626; margin-top:2px; letter-spacing:-0.3px;">—</div>
       </div>
     </div>
 
@@ -273,32 +274,46 @@
     <div class="portfolio-grid">
 
       <!-- Table -->
-      <div class="card">
+      <div class="card" style="overflow:hidden;">
         <div class="card-title">持倉明細</div>
-        <table class="holdings-table">
-          <thead>
-            <tr>
-              <th>代碼</th>
-              <th>股票名稱</th>
-              <th class="num">持股數</th>
-              <th class="num">收盤價</th>
-              <th class="num">市值</th>
-              <th class="pct">佔比</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in data.holdings %}
-            <tr>
-              <td class="ticker">{{ item.ticker }}</td>
-              <td>{{ item.name }}</td>
-              <td class="num">{{ "{:,}".format(item.shares) }}</td>
-              <td class="num">{{ "{:,.2f}".format(item.close_price) }}</td>
-              <td class="num">{{ "{:,.0f}".format(item.market_value) }}</td>
-              <td class="pct">{{ "%.1f"|format(item.market_value / data.total_value * 100) }}%</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+          <table class="holdings-table" style="min-width:700px;">
+            <thead>
+              <tr>
+                <th style="min-width:64px;">代碼</th>
+                <th style="min-width:100px;">股票名稱</th>
+                <th class="num" style="min-width:72px;">持股數</th>
+                <th class="num" style="min-width:80px;">即時價</th>
+                <th class="num" style="min-width:80px;">成本均價</th>
+                <th class="num" style="min-width:96px;">未實現損益</th>
+                <th class="num" style="min-width:68px;">損益%</th>
+                <th class="num" style="min-width:88px;">市值</th>
+                <th class="pct" style="min-width:52px;">佔比</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in data.holdings %}
+              {% set pnl = item.unrealized_pnl %}
+              {% set pnl_color = '#15803d' if pnl and pnl >= 0 else '#dc2626' if pnl else '#64727a' %}
+              <tr>
+                <td class="ticker">{{ item.ticker }}</td>
+                <td style="white-space:nowrap;">{{ item.name }}</td>
+                <td class="num">{{ "{:,.2f}".format(item.shares) if item.shares % 1 != 0 else "{:,}".format(item.shares | int) }}</td>
+                <td class="num">{{ "{:,.2f}".format(item.close_price) }}</td>
+                <td class="num" style="color:var(--muted);">{{ "{:,.2f}".format(item.avg_cost) if item.avg_cost else "—" }}</td>
+                <td class="num" style="font-weight:600; color:{{ pnl_color }};">
+                  {% if pnl %}{{ "+" if pnl >= 0 else "" }}{{ "{:,.0f}".format(pnl) }}{% else %}—{% endif %}
+                </td>
+                <td class="num" style="color:{{ pnl_color }};">
+                  {% if item.unrealized_pnl_pct %}{{ "+" if item.unrealized_pnl_pct >= 0 else "" }}{{ "{:.2f}".format(item.unrealized_pnl_pct) }}%{% else %}—{% endif %}
+                </td>
+                <td class="num">{{ "{:,.0f}".format(item.market_value) }}</td>
+                <td class="pct">{{ "%.1f"|format(item.market_value / data.total_value * 100) }}%</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Chart -->
@@ -342,13 +357,16 @@
                 <thead>
                   <tr>
                     <th style="width:70px;">代碼</th>
-                    <th style="width:160px;">名稱</th>
-                    <th style="width:70px;">券商</th>
-                    <th class="num" style="width:80px;">股數</th>
+                    <th style="width:140px;">名稱</th>
+                    <th style="width:60px;">券商</th>
+                    <th class="num" style="width:70px;">股數</th>
                     <th class="num" style="width:80px;">即時價</th>
-                    <th class="num" style="width:100px;">市值 (USD)</th>
-                    <th class="num" style="width:100px;">市值 (TWD)</th>
-                    <th class="pct" style="width:60px;">佔比</th>
+                    <th class="num" style="width:80px;">成本均價</th>
+                    <th class="num" style="width:100px;">未實現損益</th>
+                    <th class="num" style="width:70px;">損益%</th>
+                    <th class="num" style="width:95px;">市值 (USD)</th>
+                    <th class="num" style="width:95px;">市值 (TWD)</th>
+                    <th class="pct" style="width:55px;">佔比</th>
                   </tr>
                 </thead>
                 <tbody id="usTableBody"></tbody>
@@ -464,9 +482,21 @@
         if (totalTwd) {
           const combined = twStockTotal + totalTwd;
           const combinedStr = `NT$ ${Math.round(combined).toLocaleString()}`;
-          document.getElementById('heroTotal').textContent = combinedStr;
-          document.getElementById('summaryTotal').textContent = combinedStr;
+          // hero 維持顯示台股，總持倉數字不變；PNL 另外顯示在 heroPnl
         }
+        try {
+          const pnlRes = await fetch('/portfolio/combined-pnl');
+          if (pnlRes.ok) {
+            const pnlData = await pnlRes.json();
+            const pnlEl = document.getElementById('heroPnl');
+            if (pnlEl && pnlData.total_pnl_twd != null) {
+              const pnl = pnlData.total_pnl_twd;
+              const sign = pnl >= 0 ? '+' : '';
+              pnlEl.textContent = `${sign}NT$ ${Math.round(pnl).toLocaleString()}`;
+              pnlEl.style.color = pnl >= 0 ? '#15803d' : '#dc2626';
+            }
+          }
+        } catch (e) { /* silent fail */ }
 
         // summary
         const sb = document.getElementById('usSummaryBar');
@@ -498,12 +528,21 @@
           const brokerLabel = h.brokers === 'firstrade'
             ? '<span style="font-size:10px;background:#ede9fe;color:#6d28d9;border-radius:4px;padding:1px 5px;white-space:nowrap;">FT</span>'
             : '<span style="font-size:10px;background:#dcfce7;color:#15803d;border-radius:4px;padding:1px 5px;white-space:nowrap;">國泰</span>';
+          const avgCostStr = h.avg_cost != null ? `$${h.avg_cost.toFixed(2)}` : '—';
+          const pnl = h.unrealized_pnl;
+          const pnlPct = h.unrealized_pnl_pct;
+          const pnlColor = pnl == null ? '' : pnl >= 0 ? 'color:#15803d;' : 'color:#dc2626;';
+          const pnlStr = pnl == null ? '—' : `${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+          const pnlPctStr = pnlPct == null ? '—' : `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`;
           tbody.innerHTML += `<tr>
             <td class="ticker">${h.ticker}</td>
             <td>${h.name}</td>
             <td>${brokerLabel}</td>
             <td class="num">${h.shares % 1 === 0 ? h.shares.toFixed(0) : h.shares.toFixed(4)}</td>
             <td class="num">${price}</td>
+            <td class="num" style="color:var(--muted);">${avgCostStr}</td>
+            <td class="num" style="font-weight:600;${pnlColor}">${pnlStr}</td>
+            <td class="num" style="${pnlColor}">${pnlPctStr}</td>
             <td class="num">${mvUsdStr}</td>
             <td class="num" style="color:var(--muted);font-size:12px;">${mvTwdStr}</td>
             <td class="pct">${pct !== '-' ? pct + '%' : '-'}</td>

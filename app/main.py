@@ -26,7 +26,7 @@ from app.repositories import (
 )
 from app.services.ingest import ingest_latest_snapshot, refresh_active_etfs
 from app.services.maintenance import lock_00992a_baseline
-from app.services.portfolio import get_latest_holdings
+from app.services.portfolio import get_latest_holdings, set_cost_basis
 from app.services.cathay_sync import run as run_cathay_sync
 from app.services.us_portfolio import get_us_holdings, import_baseline
 from app.services.us_stock_sync import run as run_us_stock_sync
@@ -319,6 +319,19 @@ def portfolio_sync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/portfolio/set-cost")
+def portfolio_set_cost(positions: list[dict]) -> dict:
+    """
+    手動設定台股成本均價。
+    Body: [{ "ticker": "0050", "avg_cost": 185.5 }, ...]
+    """
+    try:
+        count = set_cost_basis(positions)
+        return {"status": "ok", "updated": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── US Stock Portfolio ────────────────────────────────────────────────────────
 
 @app.get("/us-portfolio/holdings")
@@ -327,6 +340,43 @@ def us_portfolio_holdings() -> dict:
     if not data:
         raise HTTPException(status_code=404, detail="No US stock positions found. Import baseline first.")
     return data
+
+
+@app.get("/portfolio/combined-pnl")
+def portfolio_combined_pnl() -> dict:
+    """
+    合併台股 + 美股總市值、總成本、即時總未實現損益。
+    """
+    from app.services.portfolio import get_latest_holdings
+
+    tw = get_latest_holdings()
+    us = get_us_holdings()
+
+    if not tw or not us:
+        raise HTTPException(status_code=404, detail="Missing portfolio data")
+
+    rate = us.get("usd_twd_rate") or 1
+    us_cost = sum((h.get("avg_cost") or 0) * h["shares"] for h in us.get("holdings", []))
+    us_total_cost_twd = us_cost * rate
+
+    combined_total_cost = tw.get("total_cost", 0) + us_total_cost_twd
+    combined_total_mv = tw.get("total_value", 0) + us.get("total_value_twd", 0)
+    combined_pnl = combined_total_mv - combined_total_cost
+    combined_pnl_pct = (combined_pnl / combined_total_cost * 100) if combined_total_cost else None
+
+    return {
+        "total_cost_twd": combined_total_cost,
+        "total_mv_twd": combined_total_mv,
+        "total_pnl_twd": combined_pnl,
+        "total_pnl_pct": combined_pnl_pct,
+        "tw_total_cost": tw.get("total_cost", 0),
+        "tw_total_mv": tw.get("total_value", 0),
+        "us_total_cost_usd": us_cost,
+        "us_total_cost_twd": us_cost * rate,
+        "us_total_mv_usd": us.get("total_value_usd", 0),
+        "us_total_mv_twd": us.get("total_value_twd", 0),
+        "usd_twd_rate": rate,
+    }
 
 
 @app.post("/us-portfolio/baseline")

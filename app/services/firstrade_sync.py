@@ -62,6 +62,7 @@ def _upsert_positions(items: list[dict]) -> int:
             "firstrade_api",
             now,
             "firstrade",
+            float(item["unit_cost"]) if item.get("unit_cost") else None,
         )
         for item in items
         if float(item.get("quantity", 0)) > 0
@@ -74,8 +75,8 @@ def _upsert_positions(items: list[dict]) -> int:
         conn.executemany(
             """
             INSERT INTO us_stock_transactions
-                (trade_date, ticker, name, action, shares, price, source_file, imported_at, broker)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (trade_date, ticker, name, action, shares, price, source_file, imported_at, broker, cost_basis)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )

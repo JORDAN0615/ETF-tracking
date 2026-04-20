@@ -18,7 +18,27 @@ def _get_us_positions() -> list[dict]:
                 ticker,
                 MAX(name) AS name,
                 SUM(CASE WHEN action = 'sell' THEN -shares ELSE shares END) AS total_shares,
-                GROUP_CONCAT(DISTINCT broker) AS brokers
+                GROUP_CONCAT(DISTINCT broker) AS brokers,
+                -- Firstrade: 直接用 API 提供的 cost_basis（快照模式只有一列）
+                MAX(CASE WHEN broker = 'firstrade' AND cost_basis IS NOT NULL THEN cost_basis END)
+                    AS firstrade_cost_basis,
+                -- Cathay: 優先用手動填入的 cost_basis（initial 紀錄），
+                --         fallback 到有 price 的 buy 交易加權平均
+                CASE
+                    WHEN SUM(CASE WHEN broker = 'cathay' AND action = 'initial' AND cost_basis IS NOT NULL
+                                  THEN shares ELSE 0 END) > 0
+                    THEN SUM(CASE WHEN broker = 'cathay' AND action = 'initial' AND cost_basis IS NOT NULL
+                                  THEN shares * cost_basis ELSE 0 END)
+                       / SUM(CASE WHEN broker = 'cathay' AND action = 'initial' AND cost_basis IS NOT NULL
+                                  THEN shares ELSE 0 END)
+                    WHEN SUM(CASE WHEN broker = 'cathay' AND action IN ('buy','initial') AND price IS NOT NULL
+                                  THEN shares ELSE 0 END) > 0
+                    THEN SUM(CASE WHEN broker = 'cathay' AND action IN ('buy','initial') AND price IS NOT NULL
+                                  THEN shares * price ELSE 0 END)
+                       / SUM(CASE WHEN broker = 'cathay' AND action IN ('buy','initial') AND price IS NOT NULL
+                                  THEN shares ELSE 0 END)
+                    ELSE NULL
+                END AS cathay_avg_cost
             FROM us_stock_transactions
             GROUP BY ticker
             HAVING total_shares > 0.0001
@@ -95,14 +115,33 @@ def get_us_holdings() -> dict | None:
         market_value_twd = market_value_usd * usd_twd if (market_value_usd and usd_twd) else None
         if market_value_usd:
             total_usd += market_value_usd
+
+        # 成本均價：Firstrade 優先用 API 提供的，Cathay 用加權平均
+        brokers = pos.get("brokers", "")
+        avg_cost: float | None = None
+        if pos.get("firstrade_cost_basis"):
+            avg_cost = float(pos["firstrade_cost_basis"])
+        elif pos.get("cathay_avg_cost"):
+            avg_cost = float(pos["cathay_avg_cost"])
+
+        # 未實現損益
+        unrealized_pnl: float | None = None
+        unrealized_pnl_pct: float | None = None
+        if price and avg_cost and avg_cost > 0:
+            unrealized_pnl = (price - avg_cost) * shares
+            unrealized_pnl_pct = (price / avg_cost - 1) * 100
+
         holdings.append({
             "ticker": t,
             "name": pos["name"] or t,
             "shares": shares,
             "price_usd": price,
+            "avg_cost": avg_cost,
+            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl_pct": unrealized_pnl_pct,
             "market_value_usd": market_value_usd,
             "market_value_twd": market_value_twd,
-            "brokers": pos.get("brokers", ""),
+            "brokers": brokers,
         })
 
     total_twd = total_usd * usd_twd if (total_usd and usd_twd) else None

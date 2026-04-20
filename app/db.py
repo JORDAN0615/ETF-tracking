@@ -145,6 +145,23 @@ def _init_sqlite() -> None:
                 PRIMARY KEY (trade_date, ticker)
             );
 
+            CREATE TABLE IF NOT EXISTS tw_stock_cost_basis (
+                ticker      TEXT PRIMARY KEY,
+                avg_cost    REAL NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tw_manual_positions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker      TEXT NOT NULL,
+                name        TEXT,
+                broker      TEXT NOT NULL,
+                shares      REAL NOT NULL,
+                avg_cost    REAL NOT NULL,
+                updated_at  TEXT NOT NULL,
+                UNIQUE(ticker, broker)
+            );
+
             CREATE TABLE IF NOT EXISTS us_stock_transactions (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 trade_date  TEXT NOT NULL,
@@ -173,6 +190,10 @@ def _init_sqlite() -> None:
         if "broker" not in us_cols:
             connection.execute(
                 "ALTER TABLE us_stock_transactions ADD COLUMN broker TEXT NOT NULL DEFAULT 'cathay'"
+            )
+        if "cost_basis" not in us_cols:
+            connection.execute(
+                "ALTER TABLE us_stock_transactions ADD COLUMN cost_basis REAL"
             )
 
 
